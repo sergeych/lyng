@@ -175,6 +175,8 @@ List could be sorted in place, just like [Collection] provide sorted copies, in 
 | `[Range]`                     | get slice of the array (copy)                | Range       |
 | `+=`                          | append element(s) (2)                        | List or Obj |
 | `List.fill(size, block)`      | build a new list from indices `0..<size`     | Int, Callable |
+| `List.fill(size,capacity,block)` | same, pre-allocating capacity slots       | Int, Int, Callable |
+| `ensureCapacity(count)`       | pre-allocate storage for at least `count` elements without reallocation (5) | Int |
 | `sort()`                      | in-place sort, natural order                 | void        |
 | `sortBy(predicate)`           | in-place sort bu `predicate` call result (3) | void        |
 | `sortWith(comparator)`        | in-place sort using `comarator` function (4) | void        |
@@ -196,6 +198,11 @@ order, e.g. is same as `list.sortWith { a,b -> predicate(a) <=> predicate(b) }`
 : comparator callable takes tho arguments and must return: negative value when first is less,
 positive if first is greater, and zero if they are equal. For example, the equvalent comparator
 for `sort()` will be `sort { a, b -> a <=> b }
+
+(5)
+: if the current capacity is already ≥ `count`, this is a no-op. Otherwise the internal storage
+is reallocated to hold at least `count` elements. Use this before a bulk `+=` loop to avoid
+repeated reallocations. `List.fill(size, capacity, block)` calls this automatically.
 
 It inherits from [Iterable] too and thus all iterable methods are applicable to any list.
 

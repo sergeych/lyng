@@ -432,11 +432,19 @@ fun List<T>.sort(): void {
     sortWith { a, b -> a <=> b }
 }
 
-/* Build a new list of `size` elements by calling `block(index)` for each index. */
-static fun List<T>.fill(size: Int, block: (Int)->T): List<T> {
-    val result = List<T>()
-    for( i in 0..<size ) result += block(i)
-    result
+/*
+    Build a new list of `size` elements by calling `block(index)` for each index.
+    `capacity` less size is ignored (size will be used as capacity).
+*/
+static fun List<T>.fill(size: Int, capacity = -1, block: (Int)->T): List<T> {
+    require(size >= 0, "size must not be negative")
+    val capacity = capacity < size ? size : capacity
+    List<T>().also {
+        if( size > 0 ) {
+            it.ensureCapacity(capacity)
+            for( i in 0..<size ) it += block(i)
+        }
+    }
 }
 
 /* Print this exception and its stack trace to standard output. */
@@ -587,7 +595,7 @@ class LaunchPool(maxWorkers, maxQueueSize = Channel.UNLIMITED) {
         mu.withLock {
             if (isClosed) throw IllegalStateException("LaunchPool is closed")
         }
-        val d = CompletableDeferred()
+            val d = CompletableDeferred()
         val wrapper = {
             try { d.complete(lambda()) }
             catch(e) { d.completeExceptionally(e) }

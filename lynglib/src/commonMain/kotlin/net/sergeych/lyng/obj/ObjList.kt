@@ -528,6 +528,22 @@ open class ObjList(initialList: MutableList<Obj> = mutableListOf()) : Obj() {
                 } else self.list.removeLast()
                 self
             }
+            addFnDoc(
+                name= "ensureCapacity",
+                doc = """
+                    ensure the list capacity allows storing specified amount if items without reallocation. 
+                    If current capacity is greater or equal to `count`, does nothing. Note that possible reallocation
+                    could be a costly operation,
+                """.trimIndent(),
+                params = listOf(ParamDoc("count", type("lyng.Int"))),
+                moduleName = "lyng.stdlib"
+            ) {
+                val self = thisAs<ObjList>()
+                val list = self.list as ArrayList
+                val count = requireOnlyArg<ObjInt>().value.toInt()
+                list.ensureCapacity(count)
+                self
+            }
 
             addFnDoc(
                 name = "removeRange",

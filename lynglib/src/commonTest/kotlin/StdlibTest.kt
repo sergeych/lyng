@@ -436,4 +436,12 @@ class StdlibTest {
             assertEquals(2, x)
         """.trimIndent())
     }
+
+    @Test
+    fun testListFill() = runTest {
+        eval("""
+            val x = List.fill(5) { i -> i * 10 }
+            assertEquals([0, 10, 20, 30, 40], x)
+        """.trimIndent())
+    }
 }

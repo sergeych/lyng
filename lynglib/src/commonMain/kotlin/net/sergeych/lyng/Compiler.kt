@@ -3424,6 +3424,10 @@ class Compiler(
                     index < expectedParams.size
                 ) {
                     expectedParams[index]
+                } else if (param.type == TypeDecl.TypeAny && index == 0 && argsDeclaration.params.size == 1 &&
+                    implicitItType != null
+                ) {
+                    implicitItType
                 } else {
                     param.type
                 }
