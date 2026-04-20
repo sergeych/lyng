@@ -444,4 +444,28 @@ class StdlibTest {
             assertEquals([0, 10, 20, 30, 40], x)
         """.trimIndent())
     }
+    @Test
+    fun testListFill2() = runTest {
+        eval("""
+            val b: List<Int> = List.fill(5,10) { it }
+            println(b)
+            assertEquals(b, [0,1,2,3,4])
+        """.trimIndent())
+    }
+
+    @Test
+    fun testTypedParamCaptureInClosure() = runTest {
+        // Regression: typed (Int) parameters lost their value when captured into a closure
+        // because peekValue() returned null for INT-typed frame slots, causing the capture
+        // to store a FrameSlotRef as OBJ while bytecode expected INT type.
+        eval("""
+            fun makeList(n: Int): List<Int> {
+                List<Int>().also {
+                    for( i in 0..<n ) it += i
+                }
+            }
+            assertEquals([0,1,2,3,4], makeList(5))
+            assertEquals([], makeList(0))
+        """.trimIndent())
+    }
 }

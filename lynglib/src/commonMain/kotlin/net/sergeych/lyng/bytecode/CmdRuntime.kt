@@ -4174,10 +4174,15 @@ class CmdFrame(
             } else {
                 val value = record.value
                 if (!record.isMutable && value is FrameSlotRef) {
-                    val resolved = value.peekValue()
+                    val resolved = value.resolvedCaptureValueOrNull()
                     if (resolved != null) {
                         if (value.refersTo(frame, localIndex)) continue
-                        frame.setObj(localIndex, value.read())
+                        when (resolved) {
+                            is ObjInt -> frame.setInt(localIndex, resolved.value)
+                            is ObjReal -> frame.setReal(localIndex, resolved.value)
+                            is ObjBool -> frame.setBool(localIndex, resolved.value)
+                            else -> frame.setObj(localIndex, resolved)
+                        }
                     } else {
                         frame.setObj(localIndex, value)
                     }
@@ -4213,9 +4218,14 @@ class CmdFrame(
                 } else {
                     val value = record.value
                     if (!record.isMutable && value is FrameSlotRef) {
-                        val resolved = value.peekValue()
+                        val resolved = value.resolvedCaptureValueOrNull()
                         if (resolved != null) {
-                            frame.setObj(idx, value.read())
+                            when (resolved) {
+                                is ObjInt -> frame.setInt(idx, resolved.value)
+                                is ObjReal -> frame.setReal(idx, resolved.value)
+                                is ObjBool -> frame.setBool(idx, resolved.value)
+                                else -> frame.setObj(idx, resolved)
+                            }
                         } else {
                             frame.setObj(idx, value)
                         }
@@ -4279,7 +4289,15 @@ class CmdFrame(
                         }
                     } else {
                         val raw = frame.getRawObj(localIndex)
-                        if (raw == null && name != null) {
+                        // For primitive-typed slots (INT/REAL/BOOL), getRawObj returns null
+                        // but the value exists in the typed slot array. Skip the scope name
+                        // lookup to avoid finding a same-named symbol higher in the scope chain
+                        // (e.g., a List.size property when capturing a `size: Int` parameter).
+                        val isPrimitiveSlot = when (frame.getSlotTypeCode(localIndex)) {
+                            SlotType.INT.code, SlotType.REAL.code, SlotType.BOOL.code -> true
+                            else -> false
+                        }
+                        if (raw == null && name != null && !isPrimitiveSlot) {
                             val record = findNamedExistingRecord(scope, name)
                             if (record != null) {
                                 val value = record.value
