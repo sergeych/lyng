@@ -438,10 +438,9 @@ fun List<T>.sort(): void {
 */
 static fun List<T>.fill(size: Int, capacity = -1, block: (Int)->T): List<T> {
     require(size >= 0, "size must not be negative")
-    val capacity = capacity < size ? size : capacity
     List<T>().also {
         if( size > 0 ) {
-            it.ensureCapacity(capacity)
+            it.ensureCapacity(capacity < size ? size : capacity)
             for( i in 0..<size ) it += block(i)
         }
     }
