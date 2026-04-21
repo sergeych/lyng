@@ -5654,6 +5654,14 @@ class CmdFrame(
             if (index < target.slotCount) return index
             return index
         }
+        if (target.hasSlotPlanConflict(mapOf(name to index))) {
+            val record = target.getLocalRecordDirect(name)
+                ?: target.localBindings[name]
+                ?: target.parent?.get(name)
+                ?: target.get(name)
+                ?: ObjRecord(ObjUnset, isMutable = true)
+            return target.allocateSlotFor(name, record)
+        }
         target.applySlotPlan(mapOf(name to index))
         val existing = target.getLocalRecordDirect(name) ?: target.localBindings[name]
         if (existing != null) {

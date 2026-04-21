@@ -108,11 +108,7 @@ class Script(
             seedImportBindings(scope, seedScope)
         }
         if (moduleSlotPlan.isNotEmpty()) {
-            scope.applySlotPlan(moduleSlotPlan)
-            for (name in moduleSlotPlan.keys) {
-                val record = scope.objects[name] ?: scope.localBindings[name] ?: continue
-                scope.updateSlotFor(name, record)
-            }
+            installModuleSlotPlan(scope)
         }
     }
 
@@ -120,11 +116,25 @@ class Script(
         if (importBindings.isEmpty() && importedModules.isEmpty()) return
         seedImportBindings(scope, seedScope)
         if (moduleSlotPlan.isNotEmpty()) {
-            scope.applySlotPlan(moduleSlotPlan)
-            for (name in moduleSlotPlan.keys) {
-                val record = scope.objects[name] ?: scope.localBindings[name] ?: continue
-                scope.updateSlotFor(name, record)
+            installModuleSlotPlan(scope)
+        }
+    }
+
+    private fun installModuleSlotPlan(scope: Scope) {
+        for ((name, index) in moduleSlotPlan) {
+            if (scope.getSlotIndexOf(name) != null) continue
+            if (scope.hasSlotPlanConflict(mapOf(name to index))) {
+                val record = scope.objects[name]
+                    ?: scope.localBindings[name]
+                    ?: ObjRecord(ObjUnset, isMutable = true)
+                scope.allocateSlotFor(name, record)
+            } else {
+                scope.applySlotPlan(mapOf(name to index))
             }
+        }
+        for (name in moduleSlotPlan.keys) {
+            val record = scope.objects[name] ?: scope.localBindings[name] ?: continue
+            scope.updateSlotFor(name, record)
         }
     }
 

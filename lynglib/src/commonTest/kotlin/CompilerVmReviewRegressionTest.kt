@@ -151,6 +151,37 @@ class CompilerVmReviewRegressionTest {
     }
 
     @Test
+    fun preparedLambdaKeepsImmutableModuleCaptureAcrossOtherScriptsInSameScope() = runTest {
+        val unaryLambda = Compiler.compile(
+            Source(
+                "<cross-script-capture-unary>",
+                """
+                val delta = 2
+                { x -> x + delta }
+                """.trimIndent()
+            ),
+            Script.defaultImportManager
+        )
+        val unrelatedScript = Compiler.compile(
+            Source(
+                "<cross-script-capture-unrelated>",
+                """
+                val base = 7
+                base
+                """.trimIndent()
+            ),
+            Script.defaultImportManager
+        )
+
+        val scope = Script.newScope()
+        val callable = unaryLambda.execute(scope) as Statement
+        unrelatedScript.execute(scope)
+
+        assertEquals(42, callable.call(scope, ObjInt.of(40)).toInt())
+        assertEquals(42, scope.asFacade().call(callable, Arguments(ObjInt.of(40))).toInt())
+    }
+
+    @Test
     fun subjectlessWhenReportsScriptError() = runTest {
         val ex = assertFailsWith<ScriptError> {
             Compiler.compile(
