@@ -221,9 +221,11 @@ class CompilerVmReviewRegressionTest {
                 val applyResult = List<Int>().apply { add(offset); add(offset + 1) }
                 val mapped = [1, 2, 3].map { it + offset }
                 val filtered = [1, 2, 3].filter { it + offset >= 12 }
+                val notNull = [1, 2, 3].mapNotNull { if (it + offset >= 12) it + offset else null }
+                val associated = [1, 2, 3].associateBy { "k" + (it + offset) }
                 [1, 2, 3].forEach { sum += it + offset }
 
-                [letResult, applyResult, mapped, filtered, sum]
+                [letResult, applyResult, mapped, filtered, notNull, associated, sum]
                 """.trimIndent()
             ),
             Script.defaultImportManager
@@ -242,7 +244,15 @@ class CompilerVmReviewRegressionTest {
         val filtered = result.list[3] as ObjList
         assertEquals(listOf(2, 3), filtered.list.map { it.toInt() })
 
-        assertEquals(36, result.list[4].toInt())
+        val notNull = result.list[4] as ObjList
+        assertEquals(listOf(12, 13), notNull.list.map { it.toInt() })
+
+        val associated = result.list[5].toString(scope).value
+        assertContains(associated, "\"k11\" => 1")
+        assertContains(associated, "\"k12\" => 2")
+        assertContains(associated, "\"k13\" => 3")
+
+        assertEquals(36, result.list[6].toInt())
     }
 
     @Test
