@@ -26,6 +26,7 @@ import net.sergeych.lyng.Statement
 import net.sergeych.lyng.asFacade
 import net.sergeych.lyng.obj.ObjDynamic
 import net.sergeych.lyng.obj.ObjInt
+import net.sergeych.lyng.obj.ObjList
 import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.obj.toInt
 import net.sergeych.lyng.pacman.ImportManager
@@ -204,6 +205,44 @@ class CompilerVmReviewRegressionTest {
         assertEquals("foo", (dynamic.readField(scope, "foo").value as ObjString).value)
         dynamic.writeField(scope, "foo", ObjInt.of(7))
         assertEquals("barfoo=7", (dynamic.getAt(scope, ObjString("bar")) as ObjString).value)
+    }
+
+    @Test
+    fun higherOrderMethodInliningSupportsCapturedValues() = runTest {
+        val script = Compiler.compile(
+            Source(
+                "<higher-order-inline-captures>",
+                """
+                val suffix = "!"
+                val offset = 10
+                var sum = 0
+
+                val letResult = "a".let { it + suffix }
+                val applyResult = List<Int>().apply { add(offset); add(offset + 1) }
+                val mapped = [1, 2, 3].map { it + offset }
+                val filtered = [1, 2, 3].filter { it + offset >= 12 }
+                [1, 2, 3].forEach { sum += it + offset }
+
+                [letResult, applyResult, mapped, filtered, sum]
+                """.trimIndent()
+            ),
+            Script.defaultImportManager
+        )
+
+        val scope = Script.newScope()
+        val result = script.execute(scope) as ObjList
+
+        assertEquals("a!", (result.list[0] as ObjString).value)
+        val applied = result.list[1] as ObjList
+        assertEquals(listOf(10, 11), applied.list.map { it.toInt() })
+
+        val mapped = result.list[2] as ObjList
+        assertEquals(listOf(11, 12, 13), mapped.list.map { it.toInt() })
+
+        val filtered = result.list[3] as ObjList
+        assertEquals(listOf(2, 3), filtered.list.map { it.toInt() })
+
+        assertEquals(36, result.list[4].toInt())
     }
 
     @Test

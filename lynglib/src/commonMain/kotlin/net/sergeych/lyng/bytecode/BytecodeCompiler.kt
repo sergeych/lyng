@@ -4990,7 +4990,6 @@ class BytecodeCompiler(
         if (ref.args.size != 1 || ref.args.any { it.isSplat || it.name != null }) return null
         if (!ref.explicitTypeArgs.isNullOrEmpty()) return null
         val lambdaRef = extractExactLambdaRef(ref.args.first().value) ?: return null
-        if (hasModuleCapture(lambdaRef)) return null
         val inlineRef = lambdaRef.inlineBodyRef ?: return null
         if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = false, allowCaptures = true)) return null
         val paramName = lambdaRef.inlineParamNames()?.singleOrNull() ?: return null
@@ -5049,7 +5048,6 @@ class BytecodeCompiler(
         if (ref.args.size != 1 || ref.args.any { it.isSplat || it.name != null }) return null
         if (!ref.explicitTypeArgs.isNullOrEmpty()) return null
         val lambdaRef = extractExactLambdaRef(ref.args.first().value) ?: return null
-        if (hasModuleCapture(lambdaRef)) return null
         val receiverInfo = receiverInlineInfo(lambdaRef) ?: return null
         val inlineRef = lambdaRef.inlineBodyRef ?: return null
         if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = true, allowCaptures = true)) return null
@@ -5092,9 +5090,8 @@ class BytecodeCompiler(
         if (ref.args.size != 1 || ref.args.any { it.isSplat || it.name != null }) return null
         if (!ref.explicitTypeArgs.isNullOrEmpty()) return null
         val lambdaRef = extractExactLambdaRef(ref.args.first().value) ?: return null
-        if (hasAnyCapture(lambdaRef)) return null
         val inlineRef = lambdaRef.inlineBodyRef ?: return null
-        if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = false, allowCaptures = false)) return null
+        if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = false, allowCaptures = true)) return null
         val paramNames = lambdaRef.inlineParamNames() ?: return null
         if (paramNames.size != 1) return null
         val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
@@ -5773,10 +5770,17 @@ class BytecodeCompiler(
     }
 
     private fun resolveInlineCaptureSlot(entry: LambdaCaptureEntry): Int? {
-        if (entry.ownerKind != CaptureOwnerFrameKind.LOCAL) return null
         val key = ScopeSlotKey(entry.ownerScopeId, entry.ownerSlotId)
-        localSlotIndexByKey[key]?.let { return scopeSlotCount + it }
-        return null
+        return when (entry.ownerKind) {
+            CaptureOwnerFrameKind.LOCAL -> {
+                localSlotIndexByKey[key]?.let { return scopeSlotCount + it }
+                null
+            }
+            CaptureOwnerFrameKind.MODULE -> {
+                localSlotIndexByKey[key]?.let { return scopeSlotCount + it }
+                scopeSlotMap[key]
+            }
+        }
     }
 
     private fun isImplicitItIdentityRef(ref: ObjRef): Boolean {
