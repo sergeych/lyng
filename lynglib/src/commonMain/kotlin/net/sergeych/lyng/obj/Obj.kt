@@ -724,41 +724,39 @@ open class Obj {
         scope.raiseNotImplemented()
     }
 
-    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj {
-        val usePool = PerfFlags.SCOPE_POOL && this !is Statement
+    private suspend fun invokeWithBoundScope(
+        scope: Scope,
+        args: Arguments,
+        thisObj: Obj,
+        declaringClass: ObjClass? = null,
+        atPos: Pos = scope.pos
+    ): Obj {
+        val usePool = PerfFlags.SCOPE_POOL && this !is Statement && atPos == scope.pos
         return if (usePool) {
             scope.withChildFrame(args, newThisObj = thisObj) { child ->
                 if (declaringClass != null) child.currentClassCtx = declaringClass
                 (this as? BytecodeCallable)?.callOnFast(child) ?: callOn(child)
             }
         } else {
-            val child = scope.createChildScope(scope.pos, args = args, newThisObj = thisObj).also {
+            val child = scope.createChildScope(atPos, args = args, newThisObj = thisObj).also {
                 if (declaringClass != null) it.currentClassCtx = declaringClass
             }
             (this as? BytecodeCallable)?.callOnFast(child) ?: callOn(child)
         }
     }
 
+    suspend fun invoke(scope: Scope, thisObj: Obj, args: Arguments, declaringClass: ObjClass? = null): Obj {
+        return invokeWithBoundScope(scope, args, thisObj, declaringClass)
+    }
+
     suspend fun invoke(scope: Scope, thisObj: Obj, vararg args: Obj): Obj =
-        callOn(
-            scope.createChildScope(
-                scope.pos,
-                args = Arguments(args.toList()),
-                newThisObj = thisObj
-            )
-        )
+        invokeWithBoundScope(scope, Arguments(args.toList()), thisObj)
 
     suspend fun invoke(scope: Scope, thisObj: Obj): Obj =
-        callOn(
-            scope.createChildScope(
-                scope.pos,
-                args = Arguments.EMPTY,
-                newThisObj = thisObj
-            )
-        )
+        invokeWithBoundScope(scope, Arguments.EMPTY, thisObj)
 
     suspend fun invoke(scope: Scope, atPos: Pos, thisObj: Obj, args: Arguments): Obj =
-        callOn(scope.createChildScope(atPos, args = args, newThisObj = thisObj))
+        invokeWithBoundScope(scope, args, thisObj, atPos = atPos)
 
 
     val asReadonly: ObjRecord by lazy { ObjRecord(this, false) }

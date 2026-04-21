@@ -17,10 +17,12 @@
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
+import net.sergeych.lyng.Statement
 import net.sergeych.lyng.asFacade
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjString
@@ -86,6 +88,66 @@ class CompilerVmReviewRegressionTest {
         val scope = Script.newScope()
         val callable = lambda.execute(scope)
         assertEquals(42, scope.asFacade().call(callable, Arguments(ObjInt.of(40))).toInt())
+    }
+
+    @Test
+    fun genericInvokeHelpersUsePreparedLambdaEntryPoints() = runTest {
+        val unaryLambda = Compiler.compile(
+            Source(
+                "<generic-invoke-unary>",
+                """
+                val delta = 2
+                { x -> x + delta }
+                """.trimIndent()
+            ),
+            Script.defaultImportManager
+        )
+        val nullaryLambda = Compiler.compile(
+            Source(
+                "<generic-invoke-nullary>",
+                """
+                val base = 7
+                { base }
+                """.trimIndent()
+            ),
+            Script.defaultImportManager
+        )
+
+        val unaryScope = Script.newScope()
+        val nullaryScope = Script.newScope()
+        val unaryCallable = unaryLambda.execute(unaryScope)
+        val nullaryCallable = nullaryLambda.execute(nullaryScope)
+
+        assertEquals(42, unaryCallable.invoke(unaryScope, ObjString("receiver"), ObjInt.of(40)).toInt())
+        assertEquals(7, nullaryCallable.invoke(nullaryScope, ObjString("receiver")).toInt())
+        assertEquals(
+            42,
+            unaryCallable.invoke(
+                unaryScope,
+                Pos(Source("<generic-invoke-pos>", ""), 0, 0),
+                ObjString("receiver"),
+                Arguments(ObjInt.of(40))
+            ).toInt()
+        )
+    }
+
+    @Test
+    fun statementCallUsesPreparedLambdaFastPath() = runTest {
+        val unaryLambda = Compiler.compile(
+            Source(
+                "<statement-call-unary>",
+                """
+                val delta = 2
+                { x -> x + delta }
+                """.trimIndent()
+            ),
+            Script.defaultImportManager
+        )
+
+        val scope = Script.newScope()
+        val callable = unaryLambda.execute(scope) as Statement
+
+        assertEquals(42, callable.call(scope, ObjInt.of(40)).toInt())
     }
 
     @Test

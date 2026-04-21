@@ -58,7 +58,10 @@ abstract class Statement(
         val type = ObjClass("Callable")
     }
 
-    suspend fun call(scope: Scope, vararg args: Obj) = execute(scope.createChildScope(args =  Arguments(*args)))
+    suspend fun call(scope: Scope, vararg args: Obj): Obj {
+        val child = scope.createChildScope(args = Arguments(*args))
+        return (this as? BytecodeCallable)?.callOnFast(child) ?: execute(child)
+    }
 
     protected fun bytecodeOnly(scope: Scope, label: String): Nothing {
         return scope.raiseIllegalState("bytecode-only execution is required; $label needs compiled bytecode")
