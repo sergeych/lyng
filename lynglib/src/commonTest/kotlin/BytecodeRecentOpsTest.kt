@@ -568,6 +568,111 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun constructorNameUsesDirectCall() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                Map().size
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("CALL_DIRECT"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(0, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun constructorAliasUsesDirectCall() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val ctor = Map
+                val m = ctor() as Map
+                m.size
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("CALL_DIRECT"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(0, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun ifExpressionConstructorAliasUsesDirectCall() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc(flag: Bool) {
+                val ctor = if(flag) Map else Map
+                val m = ctor() as Map
+                m.size
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("CALL_DIRECT"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(0, scope.eval("calc(true)").toInt())
+    }
+
+    @Test
+    fun elvisConstructorAliasUsesDirectCall() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val ctor = null ?: Map
+                val m = ctor() as Map
+                m.size
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("CALL_DIRECT"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(0, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun localNamedFunctionUsesDirectCall() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                fun twice(x: Int) { x * 2 }
+                twice(3)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("CALL_DIRECT"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(6, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun localNamedFunctionAliasUsesDirectCall() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                fun twice(x: Int) { x * 2 }
+                val f = twice
+                f(3)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("CALL_DIRECT"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(6, scope.eval("calc()").toInt())
+    }
+
+    @Test
     fun optionalIndexPreIncSkipsOnNullReceiver() = runTest {
         eval(
             """
