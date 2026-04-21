@@ -58,6 +58,31 @@ class CmdVm {
         return execute(fn, scope0, Arguments.from(args))
     }
 
+    fun executeFastOnlyNoSuspend(
+        fn: CmdFunction,
+        scope0: Scope,
+        args: Arguments,
+        binder: ((CmdFrame, Arguments) -> Unit)? = null
+    ): Obj {
+        require(fn.fastOnly) { "fast-only execution requested for non-fast function ${fn.name}" }
+        result = null
+        val frame = CmdFrame(this, fn, scope0, args.list)
+        frame.applyCaptureRecords()
+        binder?.invoke(frame, args)
+        val cmds = fn.cmds
+        try {
+            while (result == null) {
+                val cmd = cmds[frame.ip++]
+                if (!cmd.performFast(frame)) {
+                    error("fast-only command not supported: ${cmd::class.simpleName}")
+                }
+            }
+        } catch (e: Throwable) {
+            throw frame.normalizeThrowableFast(e)
+        }
+        return result ?: ObjVoid
+    }
+
     suspend fun executeFastOnly(
         fn: CmdFunction,
         scope0: Scope,
@@ -3270,7 +3295,7 @@ class CmdCallDirect(
         } else {
             val scope = frame.ensureScope()
             if (callee is BytecodeLambdaCallable && callee.supportsDirectInvokeFastPath()) {
-                callee.invokeWithArgs(scope, args)
+                callee.invokeWithArgsFast(scope, args) ?: callee.invokeWithArgs(scope, args)
             } else {
                 callee.callOn(scope.createChildScope(scope.pos, args = args))
             }
@@ -3312,7 +3337,7 @@ class CmdCallSlot(
                 }
             }
             if (callee is BytecodeLambdaCallable && callee.supportsDirectInvokeFastPath()) {
-                callee.invokeWithArgs(scope, args)
+                callee.invokeWithArgsFast(scope, args) ?: callee.invokeWithArgs(scope, args)
             } else {
                 callee.callOn(scope.createChildScope(scope.pos, args = args))
             }
@@ -3399,9 +3424,10 @@ class CmdListFillInt(
         val result = ObjList(LongArray(size))
         for (i in 0 until size) {
             val value = if (callable is BytecodeLambdaCallable && callable.supportsImplicitIntFillFastPath()) {
-                callable.invokeImplicitIntArg(scope, i.toLong())
+                callable.invokeImplicitIntArgFast(scope, i.toLong()) ?: callable.invokeImplicitIntArg(scope, i.toLong())
             } else if (callable is BytecodeLambdaCallable && callable.supportsDirectInvokeFastPath()) {
-                callable.invokeWithArgs(scope, Arguments(ObjInt.of(i.toLong())))
+                callable.invokeWithArgsFast(scope, Arguments(ObjInt.of(i.toLong())))
+                    ?: callable.invokeWithArgs(scope, Arguments(ObjInt.of(i.toLong())))
             } else {
                 callable.callOn(scope.createChildScope(scope.pos, args = Arguments(ObjInt.of(i.toLong()))))
             }
@@ -4014,14 +4040,16 @@ class BytecodeLambdaCallable(
 
     fun supportsDirectInvokeFastPath(): Boolean = supportsDirectInvokeFastPath
 
-    private val supportsFastUndeclaredLocalInit: Boolean by lazy(LazyThreadSafetyMode.NONE) {
-        val parameterSlots = paramSlotPlan.values.toHashSet()
-        fn.localSlotNames.indices.all { localIndex ->
-            val name = fn.localSlotNames[localIndex] ?: return@all true
-            if (declaredLocalNames.contains(name)) return@all true
-            if (fn.localSlotCaptures.getOrNull(localIndex) == true) return@all true
-            parameterSlots.contains(fn.scopeSlotCount + localIndex)
+    private val fastPreboundLocalNames: Set<String> by lazy(LazyThreadSafetyMode.NONE) {
+        if (argsDeclaration == null) {
+            setOf("it")
+        } else {
+            argsDeclaration.params.mapTo(LinkedHashSet()) { it.name }
         }
+    }
+
+    private val supportsFastUndeclaredLocalInit: Boolean by lazy(LazyThreadSafetyMode.NONE) {
+        canFastSeedUndeclaredLocals(fn, declaredLocalNames, fastPreboundLocalNames)
     }
 
     private fun supportsFastOnlyVm(arguments: Arguments): Boolean {
@@ -4139,6 +4167,21 @@ class BytecodeLambdaCallable(
         }
     }
 
+    fun invokeImplicitIntArgFast(scope: Scope, arg: Long): Obj? {
+        if (!supportsFastOnlyVm(Arguments.EMPTY)) return null
+        val context = buildContext(scope, Arguments.EMPTY)
+        val binder: (CmdFrame, Arguments) -> Unit = { frame, _ ->
+            slotPlanByName["it"]?.let { itSlot ->
+                frame.frame.setInt(itSlot, arg)
+            }
+        }
+        return try {
+            CmdVm().executeFastOnlyNoSuspend(fn, context, Arguments.EMPTY, binder)
+        } catch (e: ReturnException) {
+            if (e.label == null || returnLabels.contains(e.label)) e.result else throw e
+        }
+    }
+
     suspend fun invokeWithArgs(scope: Scope, args: Arguments): Obj {
         val context = buildContext(scope, args)
         return try {
@@ -4159,6 +4202,21 @@ class BytecodeLambdaCallable(
             if (e.label == null || returnLabels.contains(e.label)) e.result else throw e
         }
     }
+
+    fun invokeWithArgsFast(scope: Scope, args: Arguments): Obj? {
+        if (!supportsFastOnlyVm(args)) return null
+        val context = buildContext(scope, args)
+        val binder: (CmdFrame, Arguments) -> Unit = { frame, arguments ->
+            bindArgumentsFast(frame, context, arguments)
+        }
+        return try {
+            CmdVm().executeFastOnlyNoSuspend(fn, context, args, binder)
+        } catch (e: ReturnException) {
+            if (e.label == null || returnLabels.contains(e.label)) e.result else throw e
+        }
+    }
+
+    override fun callOnFast(scope: Scope): Obj? = invokeWithArgsFast(scope, scope.args)
 
     override suspend fun execute(scope: Scope): Obj {
         return invokeWithArgs(scope, scope.args)
@@ -4608,6 +4666,19 @@ class CmdFrame(
             else -> t.message ?: t.toString()
         }
         val errorObject = ObjUnknownException(throwScope, message).apply { getStackTrace() }
+        return ExecutionError(errorObject, pos, message, t)
+    }
+
+    fun normalizeThrowableFast(t: Throwable): Throwable {
+        if (t is ExecutionError || t is ReturnException || t is LoopBreakContinueException) return t
+        val parentScope = ensureScope()
+        val pos = (t as? ScriptError)?.pos ?: currentErrorPos() ?: parentScope.pos
+        val throwScope = parentScope.createChildScope(pos = pos)
+        val message = when (t) {
+            is ScriptError -> t.errorMessage
+            else -> t.message ?: t.toString()
+        }
+        val errorObject = ObjUnknownException(throwScope, message)
         return ExecutionError(errorObject, pos, message, t)
     }
 

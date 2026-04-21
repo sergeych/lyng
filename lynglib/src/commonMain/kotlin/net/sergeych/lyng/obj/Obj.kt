@@ -24,6 +24,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.serializer
+import net.sergeych.lyng.BytecodeCallable
 import net.sergeych.lyng.*
 import net.sergeych.lyng.InteropOperator
 import net.sergeych.lyng.OperatorInteropRegistry
@@ -728,12 +729,13 @@ open class Obj {
         return if (usePool) {
             scope.withChildFrame(args, newThisObj = thisObj) { child ->
                 if (declaringClass != null) child.currentClassCtx = declaringClass
-                callOn(child)
+                (this as? BytecodeCallable)?.callOnFast(child) ?: callOn(child)
             }
         } else {
-            callOn(scope.createChildScope(scope.pos, args = args, newThisObj = thisObj).also {
+            val child = scope.createChildScope(scope.pos, args = args, newThisObj = thisObj).also {
                 if (declaringClass != null) it.currentClassCtx = declaringClass
-            })
+            }
+            (this as? BytecodeCallable)?.callOnFast(child) ?: callOn(child)
         }
     }
 

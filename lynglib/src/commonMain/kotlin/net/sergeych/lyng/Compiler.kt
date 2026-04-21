@@ -3553,10 +3553,81 @@ class Compiler(
         val ref = LambdaFnRef(
             valueFn = { closureScope ->
             val captureRecords = closureScope.captureRecords
-            val stmt = object : Statement(), BytecodeBodyProvider {
+            val stmt = object : Statement(), BytecodeBodyProvider, BytecodeCallable {
                 override val pos: Pos = fnStatements.pos
 
                 override fun bytecodeBody(): BytecodeStatement? = fnStatements as? BytecodeStatement
+
+                override fun callOnFast(scope: Scope): Obj? {
+                    val context = scope.applyClosureForBytecode(closureScope, preferredThisType = expectedReceiverType).also {
+                        it.args = scope.args
+                    }
+                    if (captureSlots.isNotEmpty()) {
+                        if (captureRecords != null) {
+                            context.captureRecords = captureRecords
+                            context.captureNames = captureSlots.map { it.name }
+                        } else {
+                            val resolvedRecords = ArrayList<ObjRecord>(captureSlots.size)
+                            val resolvedNames = ArrayList<String>(captureSlots.size)
+                            for (capture in captureSlots) {
+                                val rec = resolveStableCaptureRecord(
+                                    closureScope,
+                                    capture.name,
+                                    context.currentClassCtx
+                                ) ?: closureScope.raiseSymbolNotFound("symbol ${capture.name} not found")
+                                resolvedRecords.add(freezeImmutableCaptureRecord(rec))
+                                resolvedNames.add(capture.name)
+                            }
+                            context.captureRecords = resolvedRecords
+                            context.captureNames = resolvedNames
+                        }
+                    }
+                    val bytecodeBody = fnStatements as? BytecodeStatement ?: return null
+                    val bytecodeFn = bytecodeBody.bytecodeFunction()
+                    if (!supportsDirectInvokeFastPath || !bytecodeFn.fastOnly) return null
+                    val fastPreboundNames = if (argsDeclaration == null) {
+                        setOf("it")
+                    } else {
+                        argsDeclaration.params.mapTo(LinkedHashSet()) { it.name }
+                    }
+                    val declaredNames = bytecodeFn.constants
+                        .mapNotNull { it as? BytecodeConst.LocalDecl }
+                        .mapTo(mutableSetOf()) { it.name }
+                    if (!canFastSeedUndeclaredLocals(bytecodeFn, declaredNames, fastPreboundNames)) return null
+                    if (argsDeclaration != null && !argsDeclaration.supportsFastFrameBinding(scope.args)) return null
+                    val slotPlan = bytecodeFn.localSlotPlanByName()
+                    val binder: (net.sergeych.lyng.bytecode.CmdFrame, Arguments) -> Unit = { frame, arguments ->
+                        if (argsDeclaration == null) {
+                            val l = arguments.list
+                            val itValue: Obj = when (l.size) {
+                                0 -> ObjVoid
+                                1 -> l[0]
+                                else -> ObjList(l.toMutableList())
+                            }
+                            val itSlot = slotPlan["it"]
+                            if (itSlot != null) {
+                                when (itValue) {
+                                    is ObjInt -> frame.frame.setInt(itSlot, itValue.value)
+                                    is ObjReal -> frame.frame.setReal(itSlot, itValue.value)
+                                    is ObjBool -> frame.frame.setBool(itSlot, itValue.value)
+                                    else -> frame.frame.setObj(itSlot, itValue)
+                                }
+                            }
+                        } else {
+                            argsDeclaration.assignToFrameFast(
+                                context,
+                                arguments,
+                                slotPlan,
+                                frame.frame
+                            )
+                        }
+                    }
+                    return try {
+                        net.sergeych.lyng.bytecode.CmdVm().executeFastOnlyNoSuspend(bytecodeFn, context, scope.args, binder)
+                    } catch (e: ReturnException) {
+                        if (e.label == null || returnLabels.contains(e.label)) e.result else throw e
+                    }
+                }
 
                 override suspend fun execute(scope: Scope): Obj {
                     val context = scope.applyClosureForBytecode(closureScope, preferredThisType = expectedReceiverType).also {
@@ -9439,9 +9510,76 @@ class Compiler(
             val closureBox = FunctionClosureBox()
 
             val captureSlots = capturePlan.captures.toList()
-            val fnBody = object : Statement(), BytecodeBodyProvider {
+            val fnBody = object : Statement(), BytecodeBodyProvider, BytecodeCallable {
                 override val pos: Pos = start
                 override fun bytecodeBody(): BytecodeStatement? = fnStatements as? BytecodeStatement
+
+                override fun callOnFast(scope: Scope): Obj? {
+                    scope.pos = start
+                    val context = closureBox.closure?.let { closure ->
+                        scope.applyClosureForBytecode(closure).also {
+                            it.args = scope.args
+                        }
+                    } ?: scope
+
+                    val captureBase = closureBox.captureContext ?: closureBox.closure
+                    val bytecodeBody = (fnStatements as? BytecodeStatement) ?: return null
+                    val bytecodeFn = bytecodeBody.bytecodeFunction()
+                    if (!bytecodeFn.fastOnly || !argsDeclaration.supportsFastFrameBinding(scope.args)) return null
+                    val declaredNames = bytecodeFn.constants
+                        .mapNotNull { it as? BytecodeConst.LocalDecl }
+                        .mapTo(mutableSetOf()) { it.name }
+                    val preboundNames = LinkedHashSet<String>()
+                    argsDeclaration.params.mapTo(preboundNames) { it.name }
+                    mergedTypeParamDecls.mapTo(preboundNames) { it.name }
+                    if (!canFastSeedUndeclaredLocals(bytecodeFn, declaredNames, preboundNames)) return null
+                    val captureNames = captureNamesForBytecodeFunction(
+                        bytecodeFn,
+                        captureSlots.map { it.name }
+                    )
+                    val prebuiltCaptures = closureBox.captureRecords
+                    if (prebuiltCaptures != null && captureNames.isNotEmpty()) {
+                        context.captureRecords = prebuiltCaptures
+                        context.captureNames = captureNames
+                    } else if (captureBase != null && captureNames.isNotEmpty()) {
+                        val resolvedRecords = ArrayList<ObjRecord>(captureNames.size)
+                        for (name in captureNames) {
+                            val rec = resolveStableCaptureRecord(
+                                captureBase,
+                                name,
+                                context.currentClassCtx
+                            ) ?: captureBase.raiseSymbolNotFound("symbol $name not found")
+                            resolvedRecords.add(freezeImmutableCaptureRecord(rec))
+                        }
+                        context.captureRecords = resolvedRecords
+                        context.captureNames = captureNames
+                    }
+                    val slotPlan = bytecodeFn.localSlotPlanByName()
+                    val binder: (net.sergeych.lyng.bytecode.CmdFrame, Arguments) -> Unit = { frame, arguments ->
+                        argsDeclaration.assignToFrameFast(
+                            context,
+                            arguments,
+                            slotPlan,
+                            frame.frame
+                        )
+                        val typeBindings = bindTypeParamsAtRuntime(context, argsDeclaration, mergedTypeParamDecls)
+                        if (typeBindings.isNotEmpty()) {
+                            for ((name, bound) in typeBindings) {
+                                val slot = slotPlan[name] ?: continue
+                                frame.frame.setObj(slot, bound)
+                            }
+                        }
+                        if (extTypeName != null) {
+                            context.thisObj = scope.thisObj
+                        }
+                    }
+                    return try {
+                        net.sergeych.lyng.bytecode.CmdVm().executeFastOnlyNoSuspend(bytecodeFn, context, scope.args, binder)
+                    } catch (e: ReturnException) {
+                        if (e.label == null || e.label == name || e.label == outerLabel) e.result else throw e
+                    }
+                }
+
                 override suspend fun execute(scope: Scope): Obj {
                     scope.pos = start
 

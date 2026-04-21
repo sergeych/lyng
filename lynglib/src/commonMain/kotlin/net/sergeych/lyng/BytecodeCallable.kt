@@ -16,4 +16,8 @@
 
 package net.sergeych.lyng
 
-interface BytecodeCallable
+import net.sergeych.lyng.obj.Obj
+
+interface BytecodeCallable {
+    fun callOnFast(scope: Scope): Obj? = null
+}

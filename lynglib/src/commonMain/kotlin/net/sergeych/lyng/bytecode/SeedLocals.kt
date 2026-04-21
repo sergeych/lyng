@@ -19,6 +19,22 @@ package net.sergeych.lyng.bytecode
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.obj.ObjRecord
 
+internal fun canFastSeedUndeclaredLocals(
+    fn: CmdFunction,
+    declaredLocalNames: Set<String>,
+    preboundLocalNames: Set<String>
+): Boolean {
+    if (fn.localSlotNames.isEmpty()) return true
+    for (i in fn.localSlotNames.indices) {
+        val name = fn.localSlotNames[i] ?: continue
+        if (declaredLocalNames.contains(name)) continue
+        if (fn.localSlotCaptures.getOrNull(i) == true) continue
+        if (preboundLocalNames.contains(name)) continue
+        return false
+    }
+    return true
+}
+
 internal suspend fun seedFrameLocalsFromScope(frame: CmdFrame, scope: Scope) {
     val localNames = frame.fn.localSlotNames
     if (localNames.isEmpty()) return
