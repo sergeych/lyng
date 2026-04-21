@@ -347,6 +347,21 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun nestedInlineLambdaParamCallAvoidsCallSlot() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                { g -> g(10) }({ x -> x + 1 })
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
     fun letLiteralUsesInlineBytecode() = runTest {
         val scope = Script.newScope()
         scope.eval(

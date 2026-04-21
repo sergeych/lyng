@@ -909,6 +909,7 @@ class BytecodeCompiler(
             val slot = allocSlot()
             builder.emit(Opcode.MAKE_LAMBDA_FN, id, slot)
             updateSlotType(slot, SlotType.OBJ)
+            trackExactLambdaAtSlot(slot, ref)
             return CompiledValue(slot, SlotType.OBJ)
         }
         val pos = (ref as? LambdaFnRef)?.pos ?: Pos.builtIn
@@ -7724,6 +7725,7 @@ class BytecodeCompiler(
 
     private fun emitMove(value: CompiledValue, dstSlot: Int) {
         val srcSlot = value.slot
+        if (srcSlot == dstSlot) return
         val srcIsScope = srcSlot < scopeSlotCount
         val dstIsScope = dstSlot < scopeSlotCount
         if (value.type != SlotType.UNKNOWN) {
@@ -7731,12 +7733,14 @@ class BytecodeCompiler(
                 val addrSlot = ensureScopeAddr(srcSlot)
                 emitLoadFromAddr(addrSlot, dstSlot, value.type)
                 propagateObjClass(value.type, srcSlot, dstSlot)
+                propagateExactLambdaRef(value.type, srcSlot, dstSlot)
                 return
             }
             if (dstIsScope) {
                 val addrSlot = ensureScopeAddr(dstSlot)
                 emitStoreToAddr(srcSlot, addrSlot, value.type)
                 propagateObjClass(value.type, srcSlot, dstSlot)
+                propagateExactLambdaRef(value.type, srcSlot, dstSlot)
                 return
             }
         }
@@ -7748,6 +7752,7 @@ class BytecodeCompiler(
             else -> builder.emit(Opcode.BOX_OBJ, srcSlot, dstSlot)
         }
         propagateObjClass(value.type, srcSlot, dstSlot)
+        propagateExactLambdaRef(value.type, srcSlot, dstSlot)
     }
 
     private fun propagateObjClass(type: SlotType, srcSlot: Int, dstSlot: Int) {
@@ -7773,6 +7778,14 @@ class BytecodeCompiler(
         } else {
             slotObjClass.remove(dstSlot)
             listElementClassBySlot.remove(dstSlot)
+        }
+    }
+
+    private fun propagateExactLambdaRef(type: SlotType, srcSlot: Int, dstSlot: Int) {
+        if (type == SlotType.OBJ || type == SlotType.UNKNOWN) {
+            trackExactLambdaAtSlot(dstSlot, exactLambdaRefBySlot[srcSlot])
+        } else {
+            trackExactLambdaAtSlot(dstSlot, null)
         }
     }
 
