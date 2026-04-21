@@ -21,3 +21,7 @@ import net.sergeych.lyng.obj.Obj
 interface BytecodeCallable {
     fun callOnFast(scope: Scope): Obj? = null
 }
+
+interface BytecodeArgCallable {
+    fun callWithArgsFast(scope: Scope, args: Arguments): Obj? = null
+}

@@ -3290,7 +3290,10 @@ class CmdCallDirect(
                 frame.ensureScope().raiseIllegalState("bytecode runtime cannot call non-bytecode Statement")
             }
         }
-        val result = if (PerfFlags.SCOPE_POOL) {
+        val directFastResult = (callee as? BytecodeArgCallable)?.callWithArgsFast(frame.ensureScope(), args)
+        val result = if (directFastResult != null) {
+            directFastResult
+        } else if (PerfFlags.SCOPE_POOL) {
             frame.ensureScope().withChildFrame(args) { child ->
                 (callee as? BytecodeCallable)?.callOnFast(child) ?: callee.callOn(child)
             }
@@ -3328,13 +3331,16 @@ class CmdCallSlot(
             frame.ensureScope().raiseUnset(message)
         }
         val args = frame.buildArguments(argBase, argCount)
+        val scope = frame.ensureScope()
+        val directFastResult = (callee as? BytecodeArgCallable)?.callWithArgsFast(scope, args)
         val canPool = PerfFlags.SCOPE_POOL && callee !is Statement
-        val result = if (canPool) {
+        val result = if (directFastResult != null) {
+            directFastResult
+        } else if (canPool) {
             frame.ensureScope().withChildFrame(args) { child ->
                 (callee as? BytecodeCallable)?.callOnFast(child) ?: callee.callOn(child)
             }
         } else {
-            val scope = frame.ensureScope()
             if (callee is Statement) {
                 val bytecodeBody = (callee as? BytecodeBodyProvider)?.bytecodeBody()
                 if (callee !is BytecodeStatement && callee !is BytecodeCallable && bytecodeBody == null) {
@@ -3429,13 +3435,16 @@ class CmdListFillInt(
         val scope = frame.ensureScope()
         val result = ObjList(LongArray(size))
         for (i in 0 until size) {
+            val args = Arguments(ObjInt.of(i.toLong()))
             val value = if (callable is BytecodeLambdaCallable && callable.supportsImplicitIntFillFastPath()) {
                 callable.invokeImplicitIntArgFast(scope, i.toLong()) ?: callable.invokeImplicitIntArg(scope, i.toLong())
-            } else if (callable is BytecodeLambdaCallable && callable.supportsDirectInvokeFastPath()) {
-                callable.invokeWithArgsFast(scope, Arguments(ObjInt.of(i.toLong())))
-                    ?: callable.invokeWithArgs(scope, Arguments(ObjInt.of(i.toLong())))
+            } else if (callable is BytecodeArgCallable) {
+                callable.callWithArgsFast(scope, args) ?: run {
+                    val child = scope.createChildScope(scope.pos, args = args)
+                    (callable as? BytecodeCallable)?.callOnFast(child) ?: callable.callOn(child)
+                }
             } else {
-                val child = scope.createChildScope(scope.pos, args = Arguments(ObjInt.of(i.toLong())))
+                val child = scope.createChildScope(scope.pos, args = args)
                 (callable as? BytecodeCallable)?.callOnFast(child) ?: callable.callOn(child)
             }
             val intValue = (value as? ObjInt)?.value ?: scope.raiseClassCastError("expected Int fill result")
@@ -3980,7 +3989,7 @@ class BytecodeLambdaCallable(
     private val preferredThisType: String?,
     private val returnLabels: Set<String>,
     override val pos: Pos,
-) : Statement(), BytecodeCallable {
+) : Statement(), BytecodeCallable, BytecodeArgCallable {
     private val slotPlanByName: Map<String, Int> by lazy(LazyThreadSafetyMode.NONE) { fn.localSlotPlanByName() }
     private val declaredLocalNames: Set<String> by lazy(LazyThreadSafetyMode.NONE) {
         fn.constants
@@ -4222,6 +4231,8 @@ class BytecodeLambdaCallable(
             if (e.label == null || returnLabels.contains(e.label)) e.result else throw e
         }
     }
+
+    override fun callWithArgsFast(scope: Scope, args: Arguments): Obj? = invokeWithArgsFast(scope, args)
 
     override fun callOnFast(scope: Scope): Obj? = invokeWithArgsFast(scope, scope.args)
 

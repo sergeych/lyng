@@ -395,8 +395,17 @@ suspend fun Obj.getLyngExceptionMessageWithStackTrace(scope: Scope? = null,showD
     var at = "unknown"
     val stack = if (!trace.list.isEmpty()) {
         val first = trace.list[0]
-        at = (first.readField(s, "at").value as ObjString).value
-        "\n" + trace.list.map { "    at " + it.toString(s).value }.joinToString("\n")
+        suspend fun formatTraceEntry(entry: Obj): String {
+            return when (entry) {
+                is ObjString -> entry.value.removePrefix("#")
+                else -> entry.toString(s).value
+            }
+        }
+        at = when (first) {
+            is ObjString -> formatTraceEntry(first)
+            else -> (first.readField(s, "at").value as ObjString).value
+        }
+        "\n" + trace.list.map { "    at " + formatTraceEntry(it) }.joinToString("\n")
     } else {
         val pos = s.pos
         if (pos.source.fileName.isNotEmpty() && pos.currentLine.isNotEmpty()) {

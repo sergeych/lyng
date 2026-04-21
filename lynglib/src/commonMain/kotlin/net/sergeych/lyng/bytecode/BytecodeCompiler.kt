@@ -3622,7 +3622,7 @@ class BytecodeCompiler(
         if (!ref.isOptional) {
             val args = compileCallArgsWithReceiver(receiver, emptyList(), false) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
-            builder.emit(Opcode.CALL_SLOT, callee.slot, args.base, encodedCount, dst)
+            emitCallCompiled(callee, args.base, encodedCount, dst)
         } else {
             val nullSlot = allocSlot()
             builder.emit(Opcode.CONST_NULL, nullSlot)
@@ -3636,7 +3636,7 @@ class BytecodeCompiler(
             )
             val args = compileCallArgsWithReceiver(receiver, emptyList(), false) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
-            builder.emit(Opcode.CALL_SLOT, callee.slot, args.base, encodedCount, dst)
+            emitCallCompiled(callee, args.base, encodedCount, dst)
             builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
             builder.mark(nullLabel)
             builder.emit(Opcode.CONST_NULL, dst)
@@ -4895,7 +4895,7 @@ class BytecodeCompiler(
                 val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
                 val encodedCount = encodeCallArgCount(args) ?: return null
                 setPos(callPos)
-                builder.emit(Opcode.CALL_SLOT, calleeSlot, args.base, encodedCount, dst)
+                emitCallCompiled(CompiledValue(calleeSlot, SlotType.OBJ), args.base, encodedCount, dst)
             } else {
                 val nullSlot = allocSlot()
                 builder.emit(Opcode.CONST_NULL, nullSlot)
@@ -4911,7 +4911,7 @@ class BytecodeCompiler(
                 val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
                 val encodedCount = encodeCallArgCount(args) ?: return null
                 setPos(callPos)
-                builder.emit(Opcode.CALL_SLOT, calleeSlot, args.base, encodedCount, dst)
+                emitCallCompiled(CompiledValue(calleeSlot, SlotType.OBJ), args.base, encodedCount, dst)
                 builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
                 builder.mark(nullLabel)
                 builder.emit(Opcode.CONST_NULL, dst)
