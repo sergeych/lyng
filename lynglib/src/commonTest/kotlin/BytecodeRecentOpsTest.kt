@@ -214,6 +214,24 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun listFillWithCapacityUsesPrimitiveCapacityBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val xs = List.fill(5, 12) { it * 2 }
+                xs.add(99)
+                xs[0] + xs[4] + xs[5]
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("LIST_NEW_INT_CAP"), disasm)
+        assertFalse(disasm.contains("LIST_FILL_INT_CAP"), disasm)
+        assertEquals(107, scope.eval("calc()").toInt())
+    }
+
+    @Test
     fun directLambdaLiteralCallUsesInlineBytecode() = runTest {
         val scope = Script.newScope()
         scope.eval(

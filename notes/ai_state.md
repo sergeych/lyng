@@ -13,6 +13,11 @@ Current focus
 Key recent changes
 - Updated AI helper docs to reflect static typing, type expressions, and compile-time-only name resolution.
 - Added stdlib random API: `Random` and deterministic `SeededRandom` with `nextInt`, `nextFloat`, and generic `next(range)`.
+- Generalized primitive list optimization for compiler-generated `List.fill`:
+  - `List.fill(size) { intExpr }` and `List.fill(size, capacity) { intExpr }` now both have bytecode fast paths.
+  - Added `LIST_NEW_INT_CAP` / `LIST_FILL_INT_CAP` for the 3-arg capacity-preserving form.
+- Fixed `ObjList.add(...)` to preserve primitive-int backing storage instead of forcing boxing through `.list`.
+- `OptTest.testAddToArray2` no longer shows the old 10x anomaly for `List.fill(n, n + 10)` or append-to-extended-list.
 
 Known failing tests
 - None in :lynglib:jvmTest after Random/SeededRandom integration.

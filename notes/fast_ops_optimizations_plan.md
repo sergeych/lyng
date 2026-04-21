@@ -22,18 +22,25 @@ Candidates (not started)
 6) Box/unbox audit (done)
    - Unbox ObjInt/ObjReal in assign-op when target is INT/REAL to avoid boxing + obj ops.
    - MixedCompareBenchmarkTest: 240 ms -> 234 ms.
-7) Mixed compare coverage
+7) Primitive list fill with capacity (done)
+   - Extended the compiler/runtime fast path from `List.fill(size) { intExpr }` to `List.fill(size, capacity) { intExpr }`.
+   - Added `LIST_NEW_INT_CAP` and `LIST_FILL_INT_CAP` so the 3-arg form keeps primitive-int storage instead of falling back to generic stdlib code.
+   - `OptTest.testAddToArray2`: `List.fill(n, n + 10) { ... }` dropped from the prior anomaly (~10x slower than 2-arg fill) to the same range as `List.fill(n) { ... }`, roughly `56-67 ms` vs `46-75 ms` after warmup.
+8) Primitive list append preservation (done)
+   - Fixed `ObjList.add(...)` to append through the primitive-aware fast path instead of forcing `.list` and boxing the backing storage.
+   - `OptTest.testAddToArray2`: appending to the pre-extended list dropped from the prior anomaly (~10x slower) to sub-millisecond / low-millisecond timings (`~0.05-0.16 ms` for the extended list path, `~1.6-4.3 ms` for the baseline path, depending on warmup).
+9) Mixed compare coverage
    - Emit CMP_*_REAL when one operand is known ObjReal in more expression forms (not just assign-op).
    - Verify with disassembly that fast cmp opcodes are emitted.
-8) Range-loop invariant hoist
+10) Range-loop invariant hoist
    - Cache range end/step into temps once per loop; avoid repeated slot reads/boxing in body.
    - Confirm no extra CONST_OBJ in hot path.
-9) Boxing elision pass
+11) Boxing elision pass
    - Remove redundant BOX_OBJ when value feeds only primitive ops afterward (local liveness).
    - Ensure no impact on closures/escaping values.
-10) Closed-type fast paths expansion
+12) Closed-type fast paths expansion
    - Apply closed-type trust for ObjBool/ObjInt/ObjReal/ObjString in ternaries and conditional chains.
    - Guard with exact non-null temp/slot checks only.
-11) VM hot op micro-optimizations
+13) VM hot op micro-optimizations
    - Reduce frame reads/writes in ADD_INT, MUL_REAL, CMP_*_INT/REAL when operands are temps.
    - Compare against baseline; revert if regression after 10-run median.

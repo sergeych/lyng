@@ -5038,18 +5038,29 @@ class BytecodeCompiler(
 
     private fun compileListFillIntCall(ref: MethodCallRef): CompiledValue? {
         if (ref.name != "fill" || !isListTypeRef(ref.receiver)) return null
-        if (ref.args.size != 2 || ref.args.any { it.isSplat || it.name != null }) return null
-        val lambdaRef = ((ref.args[1].value as? ExpressionStatement)?.ref as? LambdaFnRef) ?: return null
+        if (ref.args.size != 2 && ref.args.size != 3) return null
+        if (ref.args.any { it.isSplat || it.name != null }) return null
+        val lambdaArgIndex = ref.args.lastIndex
+        val lambdaRef = ((ref.args[lambdaArgIndex].value as? ExpressionStatement)?.ref as? LambdaFnRef) ?: return null
         if (lambdaRef.inferredReturnClass != ObjInt.type) return null
         val size = compileArgValue(ref.args[0].value) ?: return null
         if (size.type != SlotType.INT) return null
+        val capacity = if (ref.args.size == 3) {
+            val compiled = compileArgValue(ref.args[1].value) ?: return null
+            if (compiled.type != SlotType.INT) return null
+            compiled
+        } else null
         lambdaRef.inlineBodyRef?.let { inlineRef ->
-            return compileInlineListFillInt(size, lambdaRef, inlineRef)
+            return compileInlineListFillInt(size, capacity, lambdaRef, inlineRef)
         }
         run {
-            val callable = ensureObjSlot(compileArgValue(ref.args[1].value) ?: return null)
+            val callable = ensureObjSlot(compileArgValue(ref.args[lambdaArgIndex].value) ?: return null)
             val dst = allocSlot()
-            builder.emit(Opcode.LIST_FILL_INT, size.slot, callable.slot, dst)
+            if (capacity != null) {
+                builder.emit(Opcode.LIST_FILL_INT_CAP, size.slot, capacity.slot, callable.slot, dst)
+            } else {
+                builder.emit(Opcode.LIST_FILL_INT, size.slot, callable.slot, dst)
+            }
             updateSlotType(dst, SlotType.OBJ)
             slotObjClass[dst] = ObjList.type
             listElementClassBySlot[dst] = ObjInt.type
@@ -5747,8 +5758,13 @@ class BytecodeCompiler(
         }
     }
 
-    private fun compileInlineListFillInt(size: CompiledValue, lambdaRef: LambdaFnRef, inlineRef: ObjRef): CompiledValue {
-        if (isImplicitItIdentityRef(inlineRef)) {
+    private fun compileInlineListFillInt(
+        size: CompiledValue,
+        capacity: CompiledValue?,
+        lambdaRef: LambdaFnRef,
+        inlineRef: ObjRef
+    ): CompiledValue {
+        if (capacity == null && isImplicitItIdentityRef(inlineRef)) {
             val dst = allocSlot()
             builder.emit(Opcode.LIST_IOTA_INT, size.slot, dst)
             updateSlotType(dst, SlotType.OBJ)
@@ -5758,7 +5774,11 @@ class BytecodeCompiler(
         }
 
         val dst = allocSlot()
-        builder.emit(Opcode.LIST_NEW_INT, size.slot, dst)
+        if (capacity != null) {
+            builder.emit(Opcode.LIST_NEW_INT_CAP, size.slot, capacity.slot, dst)
+        } else {
+            builder.emit(Opcode.LIST_NEW_INT, size.slot, dst)
+        }
         updateSlotType(dst, SlotType.OBJ)
         slotObjClass[dst] = ObjList.type
         listElementClassBySlot[dst] = ObjInt.type

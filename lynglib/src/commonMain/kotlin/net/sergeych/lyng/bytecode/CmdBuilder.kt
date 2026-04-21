@@ -239,6 +239,10 @@ class CmdBuilder {
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.LIST_IOTA_INT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.LIST_NEW_INT_CAP ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.LIST_FILL_INT_CAP ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.MAKE_RANGE ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.LIST_LITERAL ->
@@ -844,6 +848,8 @@ class CmdBuilder {
             Opcode.LIST_NEW_INT -> CmdListNewInt(operands[0], operands[1])
             Opcode.LIST_FILL_INT -> CmdListFillInt(operands[0], operands[1], operands[2])
             Opcode.LIST_IOTA_INT -> CmdListIotaInt(operands[0], operands[1])
+            Opcode.LIST_NEW_INT_CAP -> CmdListNewIntCap(operands[0], operands[1], operands[2])
+            Opcode.LIST_FILL_INT_CAP -> CmdListFillIntCap(operands[0], operands[1], operands[2], operands[3])
             Opcode.LIST_LITERAL -> CmdListLiteral(operands[0], operands[1], operands[2], operands[3])
             Opcode.GET_MEMBER_SLOT -> CmdGetMemberSlot(operands[0], operands[1], operands[2], operands[3])
             Opcode.SET_MEMBER_SLOT -> CmdSetMemberSlot(operands[0], operands[1], operands[2], operands[3])

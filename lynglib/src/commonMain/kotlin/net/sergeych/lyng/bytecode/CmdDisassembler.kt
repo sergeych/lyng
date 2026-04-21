@@ -498,6 +498,8 @@ object CmdDisassembler {
             is CmdListNewInt -> Opcode.LIST_NEW_INT to intArrayOf(cmd.sizeSlot, cmd.dst)
             is CmdListFillInt -> Opcode.LIST_FILL_INT to intArrayOf(cmd.sizeSlot, cmd.callableSlot, cmd.dst)
             is CmdListIotaInt -> Opcode.LIST_IOTA_INT to intArrayOf(cmd.sizeSlot, cmd.dst)
+            is CmdListNewIntCap -> Opcode.LIST_NEW_INT_CAP to intArrayOf(cmd.sizeSlot, cmd.capacitySlot, cmd.dst)
+            is CmdListFillIntCap -> Opcode.LIST_FILL_INT_CAP to intArrayOf(cmd.sizeSlot, cmd.capacitySlot, cmd.callableSlot, cmd.dst)
             is CmdListLiteral -> Opcode.LIST_LITERAL to intArrayOf(cmd.planId, cmd.baseSlot, cmd.count, cmd.dst)
             is CmdGetMemberSlot -> Opcode.GET_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.methodId, cmd.dst)
             is CmdSetMemberSlot -> Opcode.SET_MEMBER_SLOT to intArrayOf(cmd.recvSlot, cmd.fieldId, cmd.methodId, cmd.valueSlot)
@@ -627,6 +629,10 @@ object CmdDisassembler {
                 listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.LIST_IOTA_INT ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.LIST_NEW_INT_CAP ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
+            Opcode.LIST_FILL_INT_CAP ->
+                listOf(OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT, OperandKind.SLOT)
             Opcode.LIST_LITERAL ->
                 listOf(OperandKind.CONST, OperandKind.SLOT, OperandKind.COUNT, OperandKind.SLOT)
             Opcode.GET_MEMBER_SLOT ->

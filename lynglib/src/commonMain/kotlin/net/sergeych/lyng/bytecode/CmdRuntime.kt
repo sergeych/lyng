@@ -3455,6 +3455,42 @@ class CmdListFillInt(
     }
 }
 
+class CmdListFillIntCap(
+    internal val sizeSlot: Int,
+    internal val capacitySlot: Int,
+    internal val callableSlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val size = frame.getInt(sizeSlot).toInt()
+        if (size < 0) frame.ensureScope().raiseIllegalArgument("list size must be non-negative")
+        val capacity = frame.getInt(capacitySlot).toInt()
+        val actualCapacity = maxOf(size, capacity)
+        if (actualCapacity < 0) frame.ensureScope().raiseIllegalArgument("list capacity must be non-negative")
+        val callable = frame.storedSlotObj(callableSlot)
+        val scope = frame.ensureScope()
+        val result = ObjList(LongArray(actualCapacity), size)
+        for (i in 0 until size) {
+            val args = Arguments(ObjInt.of(i.toLong()))
+            val value = if (callable is BytecodeLambdaCallable && callable.supportsImplicitIntFillFastPath()) {
+                callable.invokeImplicitIntArgFast(scope, i.toLong()) ?: callable.invokeImplicitIntArg(scope, i.toLong())
+            } else if (callable is BytecodeArgCallable) {
+                callable.callWithArgsFast(scope, args) ?: run {
+                    val child = scope.createChildScope(scope.pos, args = args)
+                    (callable as? BytecodeCallable)?.callOnFast(child) ?: callable.callOn(child)
+                }
+            } else {
+                val child = scope.createChildScope(scope.pos, args = args)
+                (callable as? BytecodeCallable)?.callOnFast(child) ?: callable.callOn(child)
+            }
+            val intValue = (value as? ObjInt)?.value ?: scope.raiseClassCastError("expected Int fill result")
+            result.setIntAtFast(i, intValue)
+        }
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
 private fun decodeMemberId(id: Int): Pair<Int, Boolean> {
     return if (id <= -2) {
         Pair(-id - 2, true)
@@ -3855,6 +3891,22 @@ class CmdListNewInt(
         val size = frame.getInt(sizeSlot).toInt()
         if (size < 0) frame.ensureScope().raiseIllegalArgument("list size must be non-negative")
         frame.storeObjResult(dst, ObjList(LongArray(size)))
+        return
+    }
+}
+
+class CmdListNewIntCap(
+    internal val sizeSlot: Int,
+    internal val capacitySlot: Int,
+    internal val dst: Int,
+) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val size = frame.getInt(sizeSlot).toInt()
+        if (size < 0) frame.ensureScope().raiseIllegalArgument("list size must be non-negative")
+        val capacity = frame.getInt(capacitySlot).toInt()
+        val actualCapacity = maxOf(size, capacity)
+        if (actualCapacity < 0) frame.ensureScope().raiseIllegalArgument("list capacity must be non-negative")
+        frame.storeObjResult(dst, ObjList(LongArray(actualCapacity), size))
         return
     }
 }

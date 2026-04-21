@@ -165,9 +165,9 @@ open class ObjList(initialList: MutableList<Obj> = mutableListOf()) : Obj() {
         }
     }
 
-    internal constructor(intValues: LongArray) : this(mutableListOf()) {
+    internal constructor(intValues: LongArray, size: Int = intValues.size) : this(mutableListOf()) {
         primitiveIntList = intValues
-        primitiveIntSize = intValues.size
+        primitiveIntSize = size
         boxedList = null
     }
 
@@ -519,8 +519,8 @@ open class ObjList(initialList: MutableList<Obj> = mutableListOf()) : Obj() {
                 doc = "Append one or more elements to the end of this list.",
                 moduleName = "lyng.stdlib"
             ) {
-                val l = thisAs<ObjList>().list
-                for (a in args) l.add(a)
+                val l = thisAs<ObjList>()
+                for (a in args) l.appendFast(a)
                 ObjVoid
             }
             addFnDoc(

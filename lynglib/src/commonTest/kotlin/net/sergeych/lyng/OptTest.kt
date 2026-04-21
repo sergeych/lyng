@@ -22,6 +22,7 @@ import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 class OptTest {
@@ -59,4 +60,25 @@ class OptTest {
         }
         println("add-to-array best=${bestMs}ms avg=${totalMs / passes}ms after warmup")
     }
+
+    @Test
+    fun testAddToArray2() = runTest {
+        eval(
+            $$"""
+                import lyng.time
+                val n = 700_000
+                fun tm<T>(block: ()->T): T {
+                    val t = Instant()
+                    block().also {
+                        println("tm: ${Instant() - t}")
+                    }
+                }
+                val x = tm { List.fill(n) { it * 10 + 1 } }
+                val y = tm { List.fill(n, n + 10) { it * 10 + 1 } }
+                tm { x.add(-1) }
+                tm { y.add(-2) }
+        """.trimIndent()
+        )
+    }
 }
+
