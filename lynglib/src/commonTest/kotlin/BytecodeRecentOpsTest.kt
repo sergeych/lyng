@@ -379,6 +379,55 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun conditionalExactLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            val base = { x -> x + 1 }
+            fun calc(flag: Bool) {
+                (if(flag) base else base)(10)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc(true)").toInt())
+    }
+
+    @Test
+    fun elvisExactLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            val base = { x -> x + 1 }
+            fun calc() {
+                (null ?: base)(10)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun castExactLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            type IntFn = (Int)->Int
+            val base: IntFn = { x -> x + 1 }
+            fun calc() {
+                (base as IntFn)(10)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
     fun letLiteralUsesInlineBytecode() = runTest {
         val scope = Script.newScope()
         scope.eval(
