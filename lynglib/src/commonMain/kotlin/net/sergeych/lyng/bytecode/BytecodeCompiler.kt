@@ -874,6 +874,11 @@ class BytecodeCompiler(
         }
     }
 
+    private fun emitCallDirect(callee: Obj, argBase: Int, encodedCount: Int, dst: Int) {
+        val calleeId = builder.addConst(BytecodeConst.ObjRef(callee))
+        builder.emit(Opcode.CALL_DIRECT, calleeId, argBase, encodedCount, dst)
+    }
+
     private fun compileValueFnRef(ref: ValueFnRef): CompiledValue? {
         if (ref is LambdaFnRef && ref.bytecodeFn != null) {
             val captures = (lambdaCaptureEntriesByRef[ref] ?: ref.captureEntries).orEmpty()
@@ -998,11 +1003,8 @@ class BytecodeCompiler(
     }
 
     private fun compileMapLiteral(ref: MapLiteralRef): CompiledValue? {
-        val mapClassId = builder.addConst(BytecodeConst.ObjRef(ObjMap.type))
-        val mapClassSlot = allocSlot()
-        builder.emit(Opcode.CONST_OBJ, mapClassId, mapClassSlot)
         val dst = allocSlot()
-        builder.emit(Opcode.CALL_SLOT, mapClassSlot, 0, 0, dst)
+        emitCallDirect(ObjMap.type, 0, 0, dst)
         updateSlotType(dst, SlotType.OBJ)
         slotObjClass[dst] = ObjMap.type
         for (entry in ref.entries()) {
@@ -1285,11 +1287,8 @@ class BytecodeCompiler(
             emitMove(leftObj, argLeft)
             val argRight = allocSlot()
             emitMove(rightObj, argRight)
-            val mapEntryClassId = builder.addConst(BytecodeConst.ObjRef(ObjMapEntry.type))
-            val mapEntryClassSlot = allocSlot()
-            builder.emit(Opcode.CONST_OBJ, mapEntryClassId, mapEntryClassSlot)
             val dst = allocSlot()
-            builder.emit(Opcode.CALL_SLOT, mapEntryClassSlot, argBase, 2, dst)
+            emitCallDirect(ObjMapEntry.type, argBase, 2, dst)
             updateSlotType(dst, SlotType.OBJ)
             slotObjClass[dst] = ObjMapEntry.type
             return CompiledValue(dst, SlotType.OBJ)
@@ -5090,7 +5089,6 @@ class BytecodeCompiler(
     }
 
     private fun compileInlineDirectLambdaCall(ref: CallRef, lambdaRef: LambdaFnRef): CompiledValue? {
-        if (ref.isOptionalInvoke) return null
         if (ref.tailBlock) return null
         if (!ref.explicitTypeArgs.isNullOrEmpty()) return null
         val inlineRef = lambdaRef.inlineBodyRef ?: return null
@@ -5279,12 +5277,8 @@ class BytecodeCompiler(
     }
 
     private fun createEmptyMutableList(): CompiledValue? {
-        val calleeId = builder.addConst(BytecodeConst.ObjRef(ObjList.type))
-        val calleeSlot = allocSlot()
-        builder.emit(Opcode.CONST_OBJ, calleeId, calleeSlot)
-        updateSlotType(calleeSlot, SlotType.OBJ)
         val dst = allocSlot()
-        builder.emit(Opcode.CALL_SLOT, calleeSlot, 0, 0, dst)
+        emitCallDirect(ObjList.type, 0, 0, dst)
         updateSlotType(dst, SlotType.OBJ)
         slotObjClass[dst] = ObjList.type
         return CompiledValue(dst, SlotType.OBJ)

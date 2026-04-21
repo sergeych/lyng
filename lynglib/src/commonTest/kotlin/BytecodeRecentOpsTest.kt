@@ -362,6 +362,23 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun optionalExactLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            type IntFn = (Int)->Int
+            fun calc() {
+                val f: IntFn? = { x -> x + 1 }
+                f?(10)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc()").toInt())
+    }
+
+    @Test
     fun letLiteralUsesInlineBytecode() = runTest {
         val scope = Script.newScope()
         scope.eval(
@@ -514,6 +531,40 @@ class BytecodeRecentOpsTest {
         assertTrue(disasm.contains("ITER_PUSH"), disasm)
         assertFalse(disasm.contains("CALL_DYNAMIC_MEMBER"), disasm)
         assertEquals(6, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun mapLiteralUsesDirectConstructorCall() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val m = { a: 1, b: 2 }
+                m.size
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("CALL_DIRECT"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(2, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun mapEntryLiteralUsesDirectConstructorCall() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc() {
+                val e = "a" => 2
+                e.value
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("CALL_DIRECT"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(2, scope.eval("calc()").toInt())
     }
 
     @Test
