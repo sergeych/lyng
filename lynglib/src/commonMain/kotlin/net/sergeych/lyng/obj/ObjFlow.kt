@@ -81,7 +81,7 @@ private suspend fun createLyngFlowInput(scope: Scope, producer: Obj, ownerSessio
     val runProducer: suspend CoroutineScope.() -> Unit = {
         var failure: Throwable? = null
         try {
-            producer.callOn(builderScope)
+            (producer as? net.sergeych.lyng.BytecodeCallable)?.callOnFast(builderScope) ?: producer.callOn(builderScope)
         } catch (x: ScriptFlowIsNoMoreCollected) {
             // premature flow closing, OK
         } catch (x: Throwable) {

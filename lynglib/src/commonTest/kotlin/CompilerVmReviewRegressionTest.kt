@@ -24,6 +24,7 @@ import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.Statement
 import net.sergeych.lyng.asFacade
+import net.sergeych.lyng.obj.ObjDynamic
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.obj.toInt
@@ -179,6 +180,30 @@ class CompilerVmReviewRegressionTest {
 
         assertEquals(42, callable.call(scope, ObjInt.of(40)).toInt())
         assertEquals(42, scope.asFacade().call(callable, Arguments(ObjInt.of(40))).toInt())
+    }
+
+    @Test
+    fun dynamicCallbacksUsePreparedLambdaFastPath() = runTest {
+        val script = Compiler.compile(
+            Source(
+                "<dynamic-fast-callbacks>",
+                """
+                var seen = ""
+                dynamic {
+                    get { name -> name + seen }
+                    set { name, value -> seen = name + "=" + value }
+                }
+                """.trimIndent()
+            ),
+            Script.defaultImportManager
+        )
+
+        val scope = Script.newScope()
+        val dynamic = script.execute(scope) as ObjDynamic
+
+        assertEquals("foo", (dynamic.readField(scope, "foo").value as ObjString).value)
+        dynamic.writeField(scope, "foo", ObjInt.of(7))
+        assertEquals("barfoo=7", (dynamic.getAt(scope, ObjString("bar")) as ObjString).value)
     }
 
     @Test

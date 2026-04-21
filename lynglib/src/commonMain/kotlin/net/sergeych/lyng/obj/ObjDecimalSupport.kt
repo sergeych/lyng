@@ -142,7 +142,7 @@ object ObjDecimalSupport {
             }
             val child = requireScope().createChildScope()
             child.addConst(decimalContextVar, context)
-            block.callOn(child)
+            (block as? net.sergeych.lyng.BytecodeCallable)?.callOnFast(child) ?: block.callOn(child)
         }
         registerBuiltinConversions(decimalClass)
         registerInterop(decimalClass)

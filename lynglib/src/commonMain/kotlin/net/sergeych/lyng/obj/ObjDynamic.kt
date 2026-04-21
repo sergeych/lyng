@@ -64,13 +64,19 @@ open class ObjDynamic(var readCallback: Obj? = null, var writeCallback: Obj? = n
         return (callback as? BytecodeLambdaCallable)?.rebindClosure(context) ?: callback
     }
 
+    private suspend fun callCallback(callback: Obj, child: Scope): Obj {
+        return (callback as? net.sergeych.lyng.BytecodeCallable)?.callOnFast(child) ?: callback.callOn(child)
+    }
+
     /**
      * Use read callback to dynamically resolve the field name. Note that it does not work
      * with method invocation which is implemented separately in [invokeInstanceMethod] below.
      */
     override suspend fun readField(scope: Scope, name: String): ObjRecord {
         val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
-        return readCallback?.callOn(execBase.createChildScope(Arguments(ObjString(name))))?.let {
+        return readCallback?.let { callback ->
+            callCallback(callback, execBase.createChildScope(Arguments(ObjString(name))))
+        }?.let {
             if (writeCallback != null)
                 it.asMutable
             else
@@ -90,26 +96,34 @@ open class ObjDynamic(var readCallback: Obj? = null, var writeCallback: Obj? = n
         onNotFoundResult: (suspend () -> Obj?)?
     ): Obj {
         val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
-        val over = readCallback?.callOn(execBase.createChildScope(Arguments(ObjString(name))))
+        val over = readCallback?.let { callback ->
+            callCallback(callback, execBase.createChildScope(Arguments(ObjString(name))))
+        }
         return over?.invoke(scope, scope.thisObj, args)
             ?: super.invokeInstanceMethod(scope, name, args, onNotFoundResult)
     }
 
     override suspend fun writeField(scope: Scope, name: String, newValue: Obj) {
         val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
-        writeCallback?.callOn(execBase.createChildScope(Arguments(ObjString(name), newValue)))
+        writeCallback?.let { callback ->
+            callCallback(callback, execBase.createChildScope(Arguments(ObjString(name), newValue)))
+        }
             ?: super.writeField(scope, name, newValue)
     }
 
     override suspend fun getAt(scope: Scope, index: Obj): Obj {
         val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
-        return readCallback?.callOn(execBase.createChildScope(Arguments(index)))
+        return readCallback?.let { callback ->
+            callCallback(callback, execBase.createChildScope(Arguments(index)))
+        }
             ?: super.getAt(scope, index)
     }
 
     override suspend fun putAt(scope: Scope, index: Obj, newValue: Obj) {
         val execBase = builderScope?.let { scope.applyClosure(it) } ?: scope
-        writeCallback?.callOn(execBase.createChildScope(Arguments(index, newValue)))
+        writeCallback?.let { callback ->
+            callCallback(callback, execBase.createChildScope(Arguments(index, newValue)))
+        }
             ?: super.putAt(scope, index, newValue)
     }
 
@@ -124,7 +138,7 @@ open class ObjDynamic(var readCallback: Obj? = null, var writeCallback: Obj? = n
             // Snapshot the caller scope to capture locals/args even if the runtime pools/reuses frames.
             // Module scope should stay late-bound to allow extern class rebinding and similar updates.
             delegate.builderScope = if (scope is net.sergeych.lyng.ModuleScope) null else scope.snapshotForClosure()
-            builder.callOn(buildScope)
+            (builder as? net.sergeych.lyng.BytecodeCallable)?.callOnFast(buildScope) ?: builder.callOn(buildScope)
             return delegate
         }
 

@@ -809,7 +809,8 @@ open class ObjClass(
                     if (initStmt is net.sergeych.lyng.Statement) {
                         executeBytecodeWithSeed(instance.instanceScope, initStmt, "instance init")
                     } else {
-                        initStmt.callOn(instance.instanceScope)
+                        (initStmt as? net.sergeych.lyng.BytecodeCallable)?.callOnFast(instance.instanceScope)
+                            ?: initStmt.callOn(instance.instanceScope)
                     }
                 }
             } finally {
@@ -821,13 +822,14 @@ open class ObjClass(
             c.instanceConstructor?.let { ctor ->
                 val execScope =
                     instance.instanceScope.createChildScope(args = argsForThis ?: Arguments.EMPTY, newThisObj = instance)
-                ctor.callOn(execScope)
+                (ctor as? net.sergeych.lyng.BytecodeCallable)?.callOnFast(execScope) ?: ctor.callOn(execScope)
             }
         }
     }
 
     suspend fun callWithArgs(scope: Scope, vararg plainArgs: Obj): Obj {
-        return callOn(scope.createChildScope(Arguments(*plainArgs)))
+        val child = scope.createChildScope(Arguments(*plainArgs))
+        return (this as? net.sergeych.lyng.BytecodeCallable)?.callOnFast(child) ?: callOn(child)
     }
 
 
