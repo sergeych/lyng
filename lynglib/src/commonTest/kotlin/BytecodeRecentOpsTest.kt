@@ -428,6 +428,25 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun whenExactLambdaCallUsesInlineBytecode() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            val base = { x -> x + 1 }
+            fun calc(flag: Bool) {
+                (when(flag) {
+                    true -> base
+                    else -> base
+                })(10)
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(11, scope.eval("calc(true)").toInt())
+    }
+
+    @Test
     fun letLiteralUsesInlineBytecode() = runTest {
         val scope = Script.newScope()
         scope.eval(
@@ -684,6 +703,27 @@ class BytecodeRecentOpsTest {
         assertTrue(disasm.contains("CALL_DIRECT"), disasm)
         assertFalse(disasm.contains("CALL_SLOT"), disasm)
         assertEquals(0, scope.eval("calc()").toInt())
+    }
+
+    @Test
+    fun whenConstructorAliasUsesDirectCall() = runTest {
+        val scope = Script.newScope()
+        scope.eval(
+            """
+            fun calc(flag: Bool) {
+                val ctor = when(flag) {
+                    true -> Map
+                    else -> Map
+                }
+                val m = ctor() as Map
+                m.size
+            }
+            """.trimIndent()
+        )
+        val disasm = scope.disassembleSymbol("calc")
+        assertTrue(disasm.contains("CALL_DIRECT"), disasm)
+        assertFalse(disasm.contains("CALL_SLOT"), disasm)
+        assertEquals(0, scope.eval("calc(true)").toInt())
     }
 
     @Test
