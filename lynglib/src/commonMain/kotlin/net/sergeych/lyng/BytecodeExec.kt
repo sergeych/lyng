@@ -28,6 +28,7 @@ internal suspend fun executeBytecodeWithSeed(scope: Scope, stmt: Statement, labe
         else -> null
     } ?: scope.raiseIllegalState("$label requires bytecode statement")
     scope.pos = bytecode.pos
+    bytecode.callOnFast(scope)?.let { return it }
     return CmdVm().execute(bytecode.bytecodeFunction(), scope, scope.args) { frame, _ ->
         seedFrameLocalsFromScope(frame, scope)
     }

@@ -23,19 +23,36 @@ import net.sergeych.lyng.obj.*
 class BytecodeStatement private constructor(
     val original: Statement,
     private val function: CmdFunction,
-) : Statement(original.isStaticConst, original.isConst, original.returnType) {
+) : Statement(original.isStaticConst, original.isConst, original.returnType), BytecodeCallable {
     override val pos: Pos = original.pos
+
+    private val declaredLocalNames: Set<String> by lazy(LazyThreadSafetyMode.NONE) {
+        function.constants
+            .mapNotNull { it as? BytecodeConst.LocalDecl }
+            .mapTo(mutableSetOf()) { it.name }
+    }
+
+    override fun callOnFast(scope: Scope): Obj? {
+        scope.pos = pos
+        if (!function.fastOnly) return null
+        if (!canFastSeedUndeclaredLocals(function, declaredLocalNames, emptySet())) return null
+        val binder: (CmdFrame, Arguments) -> Unit = { frame, _ ->
+            if (!trySeedFrameLocalsFromScopeFast(frame, scope)) {
+                scope.raiseIllegalState("fast local seeding is not available")
+            }
+        }
+        return CmdVm().executeFastOnlyNoSuspend(function, scope, scope.args, binder)
+    }
 
     override suspend fun execute(scope: Scope): Obj {
         scope.pos = pos
-        val declaredNames = function.constants
-            .mapNotNull { it as? BytecodeConst.LocalDecl }
-            .mapTo(mutableSetOf()) { it.name }
+        val fastResult = callOnFast(scope)
+        if (fastResult != null) return fastResult
         val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, _ ->
             val localNames = frame.fn.localSlotNames
             for (i in localNames.indices) {
                 val name = localNames[i] ?: continue
-                if (declaredNames.contains(name)) continue
+                if (declaredLocalNames.contains(name)) continue
                 val slotType = frame.getLocalSlotTypeCode(i)
                 if (slotType != SlotType.UNKNOWN.code && slotType != SlotType.OBJ.code) {
                     continue

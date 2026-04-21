@@ -17,7 +17,11 @@
 package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.FrameSlotRef
+import net.sergeych.lyng.RecordSlotRef
+import net.sergeych.lyng.ScopeSlotRef
 import net.sergeych.lyng.obj.ObjRecord
+import net.sergeych.lyng.obj.ObjProperty
 
 internal fun canFastSeedUndeclaredLocals(
     fn: CmdFunction,
@@ -31,6 +35,37 @@ internal fun canFastSeedUndeclaredLocals(
         if (fn.localSlotCaptures.getOrNull(i) == true) continue
         if (preboundLocalNames.contains(name)) continue
         return false
+    }
+    return true
+}
+
+internal fun trySeedFrameLocalsFromScopeFast(frame: CmdFrame, scope: Scope): Boolean {
+    val localNames = frame.fn.localSlotNames
+    if (localNames.isEmpty()) return true
+    val base = frame.fn.scopeSlotCount
+    for (i in localNames.indices) {
+        val name = localNames[i] ?: continue
+        val slotType = frame.getLocalSlotTypeCode(i)
+        if (slotType != SlotType.UNKNOWN.code && slotType != SlotType.OBJ.code) continue
+        if (slotType == SlotType.OBJ.code && frame.frame.getRawObj(i) != null) continue
+        val record = scope.getLocalRecordDirect(name)
+            ?: scope.chainLookupIgnoreClosure(name, followClosure = true)
+            ?: continue
+        val value = when {
+            record.type == ObjRecord.Type.Delegated -> return false
+            record.type == ObjRecord.Type.Property -> return false
+            record.value is ObjProperty -> return false
+            else -> when (val direct = record.value) {
+                is FrameSlotRef -> direct.resolvedCaptureValueOrNull() ?: return false
+                is RecordSlotRef -> direct.resolvedCaptureValueOrNull() ?: return false
+                is ScopeSlotRef -> direct.resolvedCaptureValueOrNull() ?: return false
+                else -> direct
+            }
+        }
+        if (value is FrameSlotRef && value.refersTo(frame.frame, i)) {
+            continue
+        }
+        frame.setObjUnchecked(base + i, value)
     }
     return true
 }
