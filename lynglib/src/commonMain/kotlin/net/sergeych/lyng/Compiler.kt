@@ -1948,7 +1948,7 @@ class Compiler(
                         slotTypeDeclByScopeId = slotTypeDeclByScopeId,
                         knownNameObjClass = knownClassMapForBytecode(),
                         knownClassNames = knownClassNamesForBytecode(),
-                        knownObjectNames = objectDeclNames,
+                        knownObjectNames = knownObjectNamesForBytecode(),
                         classFieldTypesByName = classFieldTypesByName,
                         enumEntriesByName = enumEntriesByName,
                         callableReturnTypeByScopeId = callableReturnTypeByScopeId,
@@ -2277,6 +2277,23 @@ class Compiler(
         return result
     }
 
+    private fun knownObjectNamesForBytecode(): Set<String> {
+        val result = LinkedHashSet<String>()
+        fun addScope(scope: Scope?) {
+            if (scope == null) return
+            for ((name, rec) in scope.objects) {
+                if (rec.value is ObjInstance) result.add(name)
+            }
+        }
+        addScope(seedScope)
+        addScope(importManager.rootScope)
+        for (module in importedModules) {
+            addScope(module.scope)
+        }
+        result.addAll(objectDeclNames)
+        return result
+    }
+
     private fun wrapBytecode(stmt: Statement): Statement {
         if (codeContexts.lastOrNull() is CodeContext.Module) return stmt
         if (codeContexts.lastOrNull() is CodeContext.ClassBody) return stmt
@@ -2305,7 +2322,7 @@ class Compiler(
             slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
             knownClassNames = knownClassNamesForBytecode(),
-            knownObjectNames = objectDeclNames,
+            knownObjectNames = knownObjectNamesForBytecode(),
             classFieldTypesByName = classFieldTypesByName,
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
@@ -2340,7 +2357,7 @@ class Compiler(
             slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownClassMapForBytecode(),
             knownClassNames = knownClassNamesForBytecode(),
-            knownObjectNames = objectDeclNames,
+            knownObjectNames = knownObjectNamesForBytecode(),
             classFieldTypesByName = classFieldTypesByName,
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
@@ -2400,7 +2417,7 @@ class Compiler(
             slotTypeDeclByScopeId = slotTypeDeclByScopeId,
             knownNameObjClass = knownNames,
             knownClassNames = knownClassNamesForBytecode(),
-            knownObjectNames = objectDeclNames,
+            knownObjectNames = knownObjectNamesForBytecode(),
             classFieldTypesByName = classFieldTypesByName,
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,

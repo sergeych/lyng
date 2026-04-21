@@ -38,17 +38,26 @@ class ImportManager(
 
     val packageNames: List<String> get() = imports.keys.toList()
 
+    private class CacheCell(var scope: ModuleScope? = null)
+
     private inner class Entry(
         val packageName: String,
         val builder: suspend (ModuleScope) -> Unit,
-        var cachedScope: ModuleScope? = null
+        val cacheCell: CacheCell = CacheCell()
     ) {
 
         suspend fun getScope(pos: Pos): ModuleScope {
-            cachedScope?.let { return it }
-            return ModuleScope(inner, pos, packageName).apply {
-                cachedScope = this
-                builder(this)
+            cacheCell.scope?.let { return it }
+            val module = ModuleScope(inner, pos, packageName)
+            cacheCell.scope = module
+            return try {
+                builder(module)
+                module
+            } catch (e: Throwable) {
+                if (cacheCell.scope === module) {
+                    cacheCell.scope = null
+                }
+                throw e
             }
         }
     }
@@ -152,14 +161,14 @@ class ImportManager(
         op.withLock {
             ImportManager(rootScope, securityManager).apply {
                 for ((name, entry) in this@ImportManager.imports) {
-                    imports[name] = Entry(entry.packageName, entry.builder, entry.cachedScope)
+                    imports[name] = Entry(entry.packageName, entry.builder, entry.cacheCell)
                 }
             }
         }
 
     fun invalidatePackageCache(name: String) {
         op.withLock {
-            imports[name]?.cachedScope = null
+            imports[name]?.cacheCell?.scope = null
         }
     }
 

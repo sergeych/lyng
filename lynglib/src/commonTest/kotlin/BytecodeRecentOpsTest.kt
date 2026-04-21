@@ -248,6 +248,21 @@ class BytecodeRecentOpsTest {
     }
 
     @Test
+    fun capturedLambdaCanCallListFillOnCapturedClassReceiver() = runTest {
+        val scope = Script.newScope()
+        val result = scope.eval(
+            """
+            fun calc(n: Int) {
+                val xs = { List.fill(n) { it } }()
+                xs[4]
+            }
+            calc(5)
+            """.trimIndent()
+        )
+        assertEquals(4, result.toInt())
+    }
+
+    @Test
     fun directLambdaLiteralCallWithCaptureUsesInlineBytecode() = runTest {
         val scope = Script.newScope()
         scope.eval(

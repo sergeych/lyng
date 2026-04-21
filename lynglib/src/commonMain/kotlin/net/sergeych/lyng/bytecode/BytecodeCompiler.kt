@@ -2688,9 +2688,7 @@ class BytecodeCompiler(
                 }
                 return value
             }
-            if ((isKnownClassReceiver(target.target) || isClassNameRef(target.target, receiverClass)) &&
-                (isClassSlot(receiver.slot) || receiverClass == ObjClassType)
-            ) {
+            if (shouldUseClassScopeReceiver(target.target, receiver, receiverClass)) {
                 val nameId = builder.addConst(BytecodeConst.StringVal(target.name))
                 if (!target.isOptional) {
                     builder.emit(Opcode.SET_CLASS_SCOPE, receiver.slot, nameId, value.slot)
@@ -3050,7 +3048,7 @@ class BytecodeCompiler(
             }
             val fieldId = if (resolvedMember != null) receiverClass.instanceFieldIdMap()[fieldTarget.name] else null
             val methodId = if (resolvedMember != null) receiverClass.instanceMethodIdMap(includeAbstract = true)[fieldTarget.name] else null
-            if (fieldId == null && methodId == null && (receiverClass == ObjClassType || isKnownClassReceiver(fieldTarget.target) || isClassNameRef(fieldTarget.target, receiverClass))) {
+            if (fieldId == null && methodId == null && shouldUseClassScopeReceiver(fieldTarget.target, receiver, receiverClass)) {
                 val nameId = builder.addConst(BytecodeConst.StringVal(fieldTarget.name))
                 if (!fieldTarget.isOptional) {
                     builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, current)
@@ -3564,9 +3562,7 @@ class BytecodeCompiler(
         val encodedMethodId = encodeMemberId(receiverClass, methodId)
         val receiver = compileRefWithFallback(ref.target, null, pos) ?: return null
         val dst = allocSlot()
-        if (fieldId == null && methodId == null && (isKnownClassReceiver(ref.target) || isClassNameRef(ref.target, receiverClass)) &&
-            (isClassSlot(receiver.slot) || receiverClass == ObjClassType)
-        ) {
+        if (fieldId == null && methodId == null && shouldUseClassScopeReceiver(ref.target, receiver, receiverClass)) {
             val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
             if (!ref.isOptional) {
                 builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, dst)
@@ -4244,9 +4240,7 @@ class BytecodeCompiler(
             }
             val fieldId = receiverClass.instanceFieldIdMap()[fieldTarget.name]
             val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[fieldTarget.name]
-            if (fieldId == null && methodId == null && (isKnownClassReceiver(fieldTarget.target) || isClassNameRef(fieldTarget.target, receiverClass)) &&
-                (isClassSlot(receiver.slot) || receiverClass == ObjClassType)
-            ) {
+            if (fieldId == null && methodId == null && shouldUseClassScopeReceiver(fieldTarget.target, receiver, receiverClass)) {
                 val nameId = builder.addConst(BytecodeConst.StringVal(fieldTarget.name))
                 val resultSlot = allocSlot()
                 if (fieldTarget.isOptional) {
@@ -4806,6 +4800,34 @@ class BytecodeCompiler(
         val receiverClass = resolveReceiverClass(ref.receiver) ?: ObjDynamic.type
         val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
         val dst = allocSlot()
+        if (shouldUseClassScopeReceiver(ref.receiver, receiver, receiverClass)) {
+            val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
+            val memberSlot = allocSlot()
+            if (!ref.isOptional) {
+                builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, memberSlot)
+            } else {
+                val nullSlot = allocSlot()
+                builder.emit(Opcode.CONST_NULL, nullSlot)
+                val cmpSlot = allocSlot()
+                builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
+                val nullLabel = builder.label()
+                val endLabel = builder.label()
+                builder.emit(
+                    Opcode.JMP_IF_TRUE,
+                    listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
+                )
+                builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, memberSlot)
+                builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
+                builder.mark(nullLabel)
+                builder.emit(Opcode.CONST_NULL, memberSlot)
+                builder.mark(endLabel)
+            }
+            val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
+            val encodedCount = encodeCallArgCount(args) ?: return null
+            setPos(callPos)
+            emitCallCompiled(CompiledValue(memberSlot, SlotType.OBJ), args.base, encodedCount, dst)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
         fun emitDynamicCall(): CompiledValue? {
             val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
             val encodedCount = encodeCallArgCount(args) ?: return null
@@ -4916,34 +4938,6 @@ class BytecodeCompiler(
                 builder.emit(Opcode.CONST_NULL, dst)
                 builder.mark(endLabel)
             }
-            return CompiledValue(dst, SlotType.OBJ)
-        }
-        if (isKnownClassReceiver(ref.receiver)) {
-            val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
-            val memberSlot = allocSlot()
-            if (!ref.isOptional) {
-                builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, memberSlot)
-            } else {
-                val nullSlot = allocSlot()
-                builder.emit(Opcode.CONST_NULL, nullSlot)
-                val cmpSlot = allocSlot()
-                builder.emit(Opcode.CMP_REF_EQ_OBJ, receiver.slot, nullSlot, cmpSlot)
-                val nullLabel = builder.label()
-                val endLabel = builder.label()
-                builder.emit(
-                    Opcode.JMP_IF_TRUE,
-                    listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
-                )
-                builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, memberSlot)
-                builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
-                builder.mark(nullLabel)
-                builder.emit(Opcode.CONST_NULL, memberSlot)
-                builder.mark(endLabel)
-            }
-            val args = compileCallArgs(ref.args, ref.tailBlock, ref.explicitTypeArgs) ?: return null
-            val encodedCount = encodeCallArgCount(args) ?: return null
-            setPos(callPos)
-            emitCallCompiled(CompiledValue(memberSlot, SlotType.OBJ), args.base, encodedCount, dst)
             return CompiledValue(dst, SlotType.OBJ)
         }
         val extSlot = resolveExtensionCallableSlot(receiverClass, ref.name)
@@ -5544,7 +5538,7 @@ class BytecodeCompiler(
         if (scopeSlotCount > 0) {
             for (index in 0 until scopeSlotCount) {
                 val name = scopeSlotNames.getOrNull(index) ?: continue
-                resolveTypeNameClass(name)?.let { trackExactCallableObjAtSlot(index, it) }
+                preloadExactCallableName(index, name)
             }
         }
         if (!allowLocalSlots || localSlotNames.isEmpty()) return
@@ -5552,10 +5546,15 @@ class BytecodeCompiler(
             val name = localSlotNames[localIndex] ?: continue
             val key = localSlotKeyByIndex.getOrNull(localIndex)
             val isModuleLocal = key != null && moduleScopeId != null && key.scopeId == moduleScopeId
-            val isCapture = localSlotCaptures.getOrNull(localIndex) == true
+            val isCapture = key != null && captureSlotKeys.contains(key)
             if (!isModuleLocal && !isCapture) continue
-            resolveTypeNameClass(name)?.let { trackExactCallableObjAtSlot(scopeSlotCount + localIndex, it) }
+            preloadExactCallableName(scopeSlotCount + localIndex, name)
         }
+    }
+
+    private fun preloadExactCallableName(slot: Int, name: String) {
+        if (slotObjClass[slot] != ObjClassType && callSignatureByName[name] == null) return
+        resolveTypeNameClass(name)?.let { trackExactCallableObjAtSlot(slot, it) }
     }
 
     private fun collectExactLambdaModuleCaptures() {
@@ -8324,37 +8323,67 @@ class BytecodeCompiler(
         return when (ref) {
             is LocalVarRef -> {
                 val name = ref.name
-                if (nameObjClass[name] == ObjClassType) return true
                 val directSlot = resolveDirectNameSlot(name)?.slot
-                if (directSlot != null && slotObjClass[directSlot] == ObjClassType) return true
+                if (directSlot != null) return isNamedClassBinding(name, directSlot)
+                if (nameObjClass[name] == ObjClassType) return true
                 if (localSlotIndexByName.containsKey(name)) return false
                 if (localSlotInfoMap.values.any { it.name == name }) return false
-                (knownClassNames.contains(name) || classFieldTypesByName.containsKey(name)) &&
-                    !knownObjectNames.contains(name)
+                isUnboundClassName(name)
             }
             is LocalSlotRef -> {
                 val name = ref.name
-                if (slotObjClass[ref.slot] == ObjClassType) return true
-                if (nameObjClass[name] == ObjClassType) return true
+                if (slotObjClass[ref.slot] != null || exactCallableObjBySlot[ref.slot] != null) {
+                    return isNamedClassBinding(name, ref.slot)
+                }
                 val directSlot = resolveDirectNameSlot(name)?.slot
-                if (directSlot != null && slotObjClass[directSlot] == ObjClassType) return true
+                if (directSlot != null) return isNamedClassBinding(name, directSlot)
+                if (nameObjClass[name] == ObjClassType) return true
                 if (localSlotIndexByName.containsKey(name)) return false
                 if (localSlotInfoMap.values.any { it.name == name }) return false
-                (knownClassNames.contains(name) || classFieldTypesByName.containsKey(name)) &&
-                    !knownObjectNames.contains(name)
+                isUnboundClassName(name)
             }
             is FastLocalVarRef -> {
                 val name = ref.name
-                if (nameObjClass[name] == ObjClassType) return true
                 val directSlot = resolveDirectNameSlot(name)?.slot
-                if (directSlot != null && slotObjClass[directSlot] == ObjClassType) return true
+                if (directSlot != null) return isNamedClassBinding(name, directSlot)
+                if (nameObjClass[name] == ObjClassType) return true
                 if (localSlotIndexByName.containsKey(name)) return false
                 if (localSlotInfoMap.values.any { it.name == name }) return false
-                (knownClassNames.contains(name) || classFieldTypesByName.containsKey(name)) &&
-                    !knownObjectNames.contains(name)
+                isUnboundClassName(name)
             }
             else -> false
         }
+    }
+
+    private fun shouldUseClassScopeReceiver(
+        ref: ObjRef,
+        receiver: CompiledValue,
+        receiverClass: ObjClass
+    ): Boolean {
+        val name = when (ref) {
+            is LocalVarRef -> ref.name
+            is LocalSlotRef -> ref.name
+            is FastLocalVarRef -> ref.name
+            else -> null
+        }
+        if (name != null && isKnownObjectBinding(name)) return false
+        return isKnownClassReceiver(ref) &&
+            (isClassSlot(receiver.slot) || receiverClass == ObjClassType || isClassNameRef(ref, receiverClass))
+    }
+
+    private fun isNamedClassBinding(name: String, slot: Int): Boolean {
+        if (isClassSlot(slot)) return true
+        if (isKnownObjectBinding(name)) return false
+        return knownClassNames.contains(name) || classFieldTypesByName.containsKey(name)
+    }
+
+    private fun isUnboundClassName(name: String): Boolean {
+        if (isKnownObjectBinding(name)) return false
+        return knownClassNames.contains(name) || classFieldTypesByName.containsKey(name)
+    }
+
+    private fun isKnownObjectBinding(name: String): Boolean {
+        return knownObjectNames.contains(name)
     }
 
     private fun isClassNameRef(ref: ObjRef, receiverClass: ObjClass): Boolean {
@@ -8365,10 +8394,11 @@ class BytecodeCompiler(
             is FastLocalVarRef -> ref.name
             else -> return false
         }
-        return name == receiverClass.className
+        return name == receiverClass.className && isKnownClassReceiver(ref)
     }
 
-    private fun isClassSlot(slot: Int): Boolean = slotObjClass[slot] == ObjClassType
+    private fun isClassSlot(slot: Int): Boolean =
+        slotObjClass[slot] == ObjClassType || exactCallableObjBySlot[slot] is ObjClass
 
 
     private fun isThisReceiver(ref: ObjRef): Boolean {
@@ -9320,8 +9350,10 @@ class BytecodeCompiler(
                 val localIndex = localSlotIndexByKey[key] ?: continue
                 val slot = scopeSlotCount + localIndex
                 localSlotCaptures[localIndex] = true
-                forcedObjSlots.add(slot)
-                slotTypes[slot] = SlotType.OBJ
+                if (!slotTypes.containsKey(slot)) {
+                    forcedObjSlots.add(slot)
+                    slotTypes[slot] = SlotType.OBJ
+                }
             }
         }
         if (allowLocalSlots && valueFnRefs.isNotEmpty() && lambdaCaptureEntriesByRef.isNotEmpty()) {
@@ -9349,8 +9381,10 @@ class BytecodeCompiler(
                     val localIndex = localSlotIndexByName[name] ?: continue
                     val slot = scopeSlotCount + localIndex
                     localSlotCaptures[localIndex] = true
-                    forcedObjSlots.add(slot)
-                    slotTypes[slot] = SlotType.OBJ
+                    if (!slotTypes.containsKey(slot)) {
+                        forcedObjSlots.add(slot)
+                        slotTypes[slot] = SlotType.OBJ
+                    }
                 }
             }
         }
@@ -9383,6 +9417,7 @@ class BytecodeCompiler(
                 }
             }
         }
+        preloadExactCallableNames()
         if (loopVarKeys.isNotEmpty()) {
             for (key in loopVarKeys) {
                 val localIndex = localSlotIndexByKey[key]
@@ -9460,11 +9495,10 @@ class BytecodeCompiler(
                         }
                         if (!scopeSlotNameMap.containsKey(key)) {
                             scopeSlotNameMap[key] = stmt.spec.name
+                        }
+                    }
                 }
             }
-        }
-        preloadExactCallableNames()
-    }
             is DelegatedVarDeclStatement -> {
                 val slotIndex = stmt.slotIndex
                 val scopeId = stmt.scopeId ?: 0
