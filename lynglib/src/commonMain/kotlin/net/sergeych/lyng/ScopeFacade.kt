@@ -66,6 +66,9 @@ internal class ScopeBridge(internal val scope: Scope) : ScopeFacade {
     override fun raiseIllegalState(message: String): Nothing = scope.raiseIllegalState(message)
     override fun raiseNotImplemented(what: String): Nothing = scope.raiseNotImplemented(what)
     override suspend fun call(callee: Obj, args: Arguments, newThisObj: Obj?): Obj {
+        if (newThisObj == null) {
+            (callee as? BytecodeArgCallable)?.callWithArgsFast(scope, args)?.let { return it }
+        }
         val child = scope.createChildScope(scope.pos, args = args, newThisObj = newThisObj)
         return (callee as? BytecodeCallable)?.callOnFast(child) ?: callee.callOn(child)
     }

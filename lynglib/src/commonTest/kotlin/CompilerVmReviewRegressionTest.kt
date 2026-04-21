@@ -16,11 +16,13 @@
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.Compiler
+import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Script
 import net.sergeych.lyng.ScriptError
 import net.sergeych.lyng.Source
 import net.sergeych.lyng.asFacade
+import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjString
 import net.sergeych.lyng.obj.toInt
 import net.sergeych.lyng.pacman.ImportManager
@@ -66,6 +68,24 @@ class CompilerVmReviewRegressionTest {
             hostScope.asFacade().call(lambda)
         }
         assertContains(ex.errorMessage, "module binding 'answer'")
+    }
+
+    @Test
+    fun facadeCallUsesPreparedLambdaWithArgs() = runTest {
+        val lambda = Compiler.compile(
+            Source(
+                "<facade-call-lambda>",
+                """
+                val base = 2
+                { x -> x + base }
+                """.trimIndent()
+            ),
+            Script.defaultImportManager
+        )
+
+        val scope = Script.newScope()
+        val callable = lambda.execute(scope)
+        assertEquals(42, scope.asFacade().call(callable, Arguments(ObjInt.of(40))).toInt())
     }
 
     @Test
