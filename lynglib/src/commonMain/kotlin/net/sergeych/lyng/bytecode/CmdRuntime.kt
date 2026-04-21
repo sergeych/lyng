@@ -3291,13 +3291,16 @@ class CmdCallDirect(
             }
         }
         val result = if (PerfFlags.SCOPE_POOL) {
-            frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
+            frame.ensureScope().withChildFrame(args) { child ->
+                (callee as? BytecodeCallable)?.callOnFast(child) ?: callee.callOn(child)
+            }
         } else {
             val scope = frame.ensureScope()
             if (callee is BytecodeLambdaCallable && callee.supportsDirectInvokeFastPath()) {
                 callee.invokeWithArgsFast(scope, args) ?: callee.invokeWithArgs(scope, args)
             } else {
-                callee.callOn(scope.createChildScope(scope.pos, args = args))
+                val child = scope.createChildScope(scope.pos, args = args)
+                (callee as? BytecodeCallable)?.callOnFast(child) ?: callee.callOn(child)
             }
         }
         frame.storeObjResult(dst, result)
@@ -3327,7 +3330,9 @@ class CmdCallSlot(
         val args = frame.buildArguments(argBase, argCount)
         val canPool = PerfFlags.SCOPE_POOL && callee !is Statement
         val result = if (canPool) {
-            frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
+            frame.ensureScope().withChildFrame(args) { child ->
+                (callee as? BytecodeCallable)?.callOnFast(child) ?: callee.callOn(child)
+            }
         } else {
             val scope = frame.ensureScope()
             if (callee is Statement) {
@@ -3339,7 +3344,8 @@ class CmdCallSlot(
             if (callee is BytecodeLambdaCallable && callee.supportsDirectInvokeFastPath()) {
                 callee.invokeWithArgsFast(scope, args) ?: callee.invokeWithArgs(scope, args)
             } else {
-                callee.callOn(scope.createChildScope(scope.pos, args = args))
+                val child = scope.createChildScope(scope.pos, args = args)
+                (callee as? BytecodeCallable)?.callOnFast(child) ?: callee.callOn(child)
             }
         }
         frame.storeObjResult(dst, result)
@@ -3429,7 +3435,8 @@ class CmdListFillInt(
                 callable.invokeWithArgsFast(scope, Arguments(ObjInt.of(i.toLong())))
                     ?: callable.invokeWithArgs(scope, Arguments(ObjInt.of(i.toLong())))
             } else {
-                callable.callOn(scope.createChildScope(scope.pos, args = Arguments(ObjInt.of(i.toLong()))))
+                val child = scope.createChildScope(scope.pos, args = Arguments(ObjInt.of(i.toLong())))
+                (callable as? BytecodeCallable)?.callOnFast(child) ?: callable.callOn(child)
             }
             val intValue = (value as? ObjInt)?.value ?: scope.raiseClassCastError("expected Int fill result")
             result.setIntAtFast(i, intValue)

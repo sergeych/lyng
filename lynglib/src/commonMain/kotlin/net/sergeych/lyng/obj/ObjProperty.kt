@@ -18,6 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.BytecodeCallable
 import net.sergeych.lyng.BytecodeBodyProvider
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Statement
@@ -41,14 +42,16 @@ class ObjProperty(
         val instanceScope = (instance as? ObjInstance)?.instanceScope ?: instance.autoInstanceScope(scope)
         val execScope = scope.applyClosure(instanceScope).createChildScope(newThisObj = instance)
         execScope.currentClassCtx = declaringClass
+        (g as? BytecodeCallable)?.callOnFast(execScope)?.let { return it }
         return when (g) {
             is BytecodeStatement -> executeBytecodeWithSeed(execScope, g, "property getter")
             is BytecodeBodyProvider -> {
                 val body = g.bytecodeBody()
-                if (body != null) executeBytecodeWithSeed(execScope, body, "property getter") else g.callOn(execScope)
+                if (body != null) executeBytecodeWithSeed(execScope, body, "property getter")
+                else (g as? BytecodeCallable)?.callOnFast(execScope) ?: g.callOn(execScope)
             }
-            is Statement -> g.callOn(execScope)
-            else -> g.callOn(execScope)
+            is Statement -> (g as? BytecodeCallable)?.callOnFast(execScope) ?: g.callOn(execScope)
+            else -> (g as? BytecodeCallable)?.callOnFast(execScope) ?: g.callOn(execScope)
         }
     }
 
@@ -59,14 +62,16 @@ class ObjProperty(
         val instanceScope = (instance as? ObjInstance)?.instanceScope ?: instance.autoInstanceScope(scope)
         val execScope = scope.applyClosure(instanceScope).createChildScope(args = Arguments(value), newThisObj = instance)
         execScope.currentClassCtx = declaringClass
+        (s as? BytecodeCallable)?.callOnFast(execScope)?.let { return }
         when (s) {
             is BytecodeStatement -> executeBytecodeWithSeed(execScope, s, "property setter")
             is BytecodeBodyProvider -> {
                 val body = s.bytecodeBody()
-                if (body != null) executeBytecodeWithSeed(execScope, body, "property setter") else s.callOn(execScope)
+                if (body != null) executeBytecodeWithSeed(execScope, body, "property setter")
+                else (s as? BytecodeCallable)?.callOnFast(execScope) ?: s.callOn(execScope)
             }
-            is Statement -> s.callOn(execScope)
-            else -> s.callOn(execScope)
+            is Statement -> (s as? BytecodeCallable)?.callOnFast(execScope) ?: s.callOn(execScope)
+            else -> (s as? BytecodeCallable)?.callOnFast(execScope) ?: s.callOn(execScope)
         }
     }
 
