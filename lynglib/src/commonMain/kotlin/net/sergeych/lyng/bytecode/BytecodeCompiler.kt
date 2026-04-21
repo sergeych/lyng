@@ -42,6 +42,7 @@ class BytecodeCompiler(
     private val enumEntriesByName: Map<String, List<String>> = emptyMap(),
     private val callableReturnTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
     private val callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
+    private val callSignatureByName: Map<String, CallSignature> = emptyMap(),
     private val externCallableNames: Set<String> = emptySet(),
     private val externBindingNames: Set<String> = emptySet(),
     private val preparedModuleBindingNames: Set<String> = emptySet(),
@@ -4980,22 +4981,22 @@ class BytecodeCompiler(
     }
 
     private fun compileInlineHigherOrderMethodCall(ref: MethodCallRef): CompiledValue? {
-        val spec = inlineHigherOrderMethodSpec(ref.name) ?: return null
+        val spec = inlineHigherOrderMethodSpec(ref) ?: return null
         if (ref.args.size != spec.argCount || ref.args.any { it.isSplat || it.name != null }) return null
         if (!ref.explicitTypeArgs.isNullOrEmpty()) return null
         val lambdaRef = extractExactLambdaRef(ref.args[spec.lambdaArgIndex].value) ?: return null
         val inlineRef = lambdaRef.inlineBodyRef ?: return null
         return when (spec.kind) {
-            InlineHigherOrderMethodKind.UNARY_ARGUMENT -> {
+            CallSignature.Kind.UNARY_ARGUMENT -> {
                 if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = false, allowCaptures = true)) return null
                 val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
                 val receiverObj = ensureObjSlot(receiver)
                 compileOptionalInlineMethod(ref.isOptional, receiverObj) {
                     val bindings = prepareInlineLambdaBindingsFromValues(lambdaRef, listOf(receiver)) ?: return@compileOptionalInlineMethod null
                     when (spec.result) {
-                        InlineHigherOrderResultMode.BLOCK_RESULT ->
+                        CallSignature.ResultMode.BLOCK_RESULT ->
                             compileInlineLambdaBody(lambdaRef, inlineRef, bindings)
-                        InlineHigherOrderResultMode.RETURN_RECEIVER -> {
+                        CallSignature.ResultMode.RETURN_RECEIVER -> {
                             compileInlineLambdaBody(lambdaRef, inlineRef, bindings) ?: return@compileOptionalInlineMethod null
                             CompiledValue(receiverObj.slot, SlotType.OBJ)
                         }
@@ -5003,7 +5004,7 @@ class BytecodeCompiler(
                     }
                 }
             }
-            InlineHigherOrderMethodKind.RECEIVER -> {
+            CallSignature.Kind.RECEIVER -> {
                 val receiverInfo = receiverInlineInfo(lambdaRef) ?: return null
                 if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = true, allowCaptures = true)) return null
                 val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
@@ -5012,7 +5013,7 @@ class BytecodeCompiler(
                     compileInlineReceiverLambdaInvocation(receiverObj, lambdaRef, spec.result, receiverInfo)
                 }
             }
-            InlineHigherOrderMethodKind.ITERABLE -> {
+            CallSignature.Kind.ITERABLE -> {
                 if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = false, allowCaptures = true)) return null
                 val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
                 val receiverObj = ensureObjSlot(receiver)
@@ -5020,7 +5021,7 @@ class BytecodeCompiler(
                     compileInlineIterableLambdaLoop(receiverObj, ref, lambdaRef, inlineRef, spec.result)
                 }
             }
-            InlineHigherOrderMethodKind.MAP_GET_OR_PUT -> {
+            CallSignature.Kind.MAP_GET_OR_PUT -> {
                 val receiverClass = resolveReceiverClass(ref.receiver) ?: return null
                 if (receiverClass != ObjMap.type) return null
                 if (!isMethodInlineSafe(lambdaRef, inlineRef, allowReceiverRefs = false, allowCaptures = true)) return null
@@ -5131,81 +5132,20 @@ class BytecodeCompiler(
         return slot
     }
 
-    private enum class InlineHigherOrderMethodKind {
-        UNARY_ARGUMENT,
-        RECEIVER,
-        ITERABLE,
-        MAP_GET_OR_PUT
-    }
-
-    private enum class InlineHigherOrderResultMode {
-        BLOCK_RESULT,
-        RETURN_RECEIVER,
-        FOR_EACH,
-        MAP,
-        FILTER,
-        MAP_NOT_NULL,
-        ASSOCIATE_BY
-    }
-
-    private data class InlineHigherOrderMethodSpec(
-        val kind: InlineHigherOrderMethodKind,
-        val result: InlineHigherOrderResultMode,
-        val argCount: Int = 1,
-        val lambdaArgIndex: Int = 0
-    )
-
     private data class InlineReceiverInfo(
         val explicitBindings: List<Pair<String, Int>>,
         val thisTypeName: String?
     )
 
-    private fun inlineHigherOrderMethodSpec(name: String): InlineHigherOrderMethodSpec? {
-        return when (name) {
-            "let" -> InlineHigherOrderMethodSpec(
-                InlineHigherOrderMethodKind.UNARY_ARGUMENT,
-                InlineHigherOrderResultMode.BLOCK_RESULT
-            )
-            "also" -> InlineHigherOrderMethodSpec(
-                InlineHigherOrderMethodKind.UNARY_ARGUMENT,
-                InlineHigherOrderResultMode.RETURN_RECEIVER
-            )
-            "apply" -> InlineHigherOrderMethodSpec(
-                InlineHigherOrderMethodKind.RECEIVER,
-                InlineHigherOrderResultMode.RETURN_RECEIVER
-            )
-            "run" -> InlineHigherOrderMethodSpec(
-                InlineHigherOrderMethodKind.RECEIVER,
-                InlineHigherOrderResultMode.BLOCK_RESULT
-            )
-            "forEach" -> InlineHigherOrderMethodSpec(
-                InlineHigherOrderMethodKind.ITERABLE,
-                InlineHigherOrderResultMode.FOR_EACH
-            )
-            "map" -> InlineHigherOrderMethodSpec(
-                InlineHigherOrderMethodKind.ITERABLE,
-                InlineHigherOrderResultMode.MAP
-            )
-            "filter" -> InlineHigherOrderMethodSpec(
-                InlineHigherOrderMethodKind.ITERABLE,
-                InlineHigherOrderResultMode.FILTER
-            )
-            "mapNotNull" -> InlineHigherOrderMethodSpec(
-                InlineHigherOrderMethodKind.ITERABLE,
-                InlineHigherOrderResultMode.MAP_NOT_NULL
-            )
-            "associateBy" -> InlineHigherOrderMethodSpec(
-                InlineHigherOrderMethodKind.ITERABLE,
-                InlineHigherOrderResultMode.ASSOCIATE_BY
-            )
-            "getOrPut" -> InlineHigherOrderMethodSpec(
-                InlineHigherOrderMethodKind.MAP_GET_OR_PUT,
-                InlineHigherOrderResultMode.BLOCK_RESULT,
-                argCount = 2,
-                lambdaArgIndex = 1
-            )
-            else -> null
-        }
+    private fun inlineHigherOrderMethodSpec(ref: MethodCallRef): CallSignature.HigherOrderInline? {
+        resolveReceiverClass(ref.receiver)
+            ?.resolveInstanceMember(ref.name)
+            ?.record
+            ?.callSignature
+            ?.inlineHigherOrder
+            ?.let { return it }
+        val receiverClass = resolveReceiverClass(ref.receiver) ?: return null
+        return extensionCallableSignature(receiverClass, ref.name)?.inlineHigherOrder
     }
 
     private fun compileOptionalInlineMethod(
@@ -5329,7 +5269,7 @@ class BytecodeCompiler(
     private fun compileInlineReceiverLambdaInvocation(
         receiverObj: CompiledValue,
         lambdaRef: LambdaFnRef,
-        behavior: InlineHigherOrderResultMode,
+        behavior: CallSignature.ResultMode,
         receiverInfo: InlineReceiverInfo
     ): CompiledValue? {
         val inlineRef = lambdaRef.inlineBodyRef ?: return null
@@ -5338,9 +5278,9 @@ class BytecodeCompiler(
         inlineThisBindings.addLast(previousBinding)
         return try {
             when (behavior) {
-                InlineHigherOrderResultMode.BLOCK_RESULT ->
+                CallSignature.ResultMode.BLOCK_RESULT ->
                     compileInlineLambdaBody(lambdaRef, inlineRef, receiverInfo.explicitBindings)
-                InlineHigherOrderResultMode.RETURN_RECEIVER -> {
+                CallSignature.ResultMode.RETURN_RECEIVER -> {
                     compileInlineLambdaBody(lambdaRef, inlineRef, receiverInfo.explicitBindings) ?: return null
                     CompiledValue(receiverSlot, SlotType.OBJ)
                 }
@@ -5372,7 +5312,7 @@ class BytecodeCompiler(
         ref: MethodCallRef,
         lambdaRef: LambdaFnRef,
         inlineRef: ObjRef,
-        behavior: InlineHigherOrderResultMode
+        behavior: CallSignature.ResultMode
     ): CompiledValue? {
         val iterableMethods = ObjIterable.instanceMethodIdMap(includeAbstract = true)
         val iteratorMethodId = iterableMethods["iterator"]
@@ -5388,17 +5328,17 @@ class BytecodeCompiler(
         builder.emit(Opcode.ITER_PUSH, iterSlot)
 
         val result = when (behavior) {
-            InlineHigherOrderResultMode.FOR_EACH -> CompiledValue(ensureVoidSlot(), SlotType.OBJ)
-            InlineHigherOrderResultMode.MAP,
-            InlineHigherOrderResultMode.FILTER,
-            InlineHigherOrderResultMode.MAP_NOT_NULL -> createEmptyMutableList() ?: return null
-            InlineHigherOrderResultMode.ASSOCIATE_BY -> createEmptyMutableMap() ?: return null
+            CallSignature.ResultMode.FOR_EACH -> CompiledValue(ensureVoidSlot(), SlotType.OBJ)
+            CallSignature.ResultMode.MAP,
+            CallSignature.ResultMode.FILTER,
+            CallSignature.ResultMode.MAP_NOT_NULL -> createEmptyMutableList() ?: return null
+            CallSignature.ResultMode.ASSOCIATE_BY -> createEmptyMutableMap() ?: return null
             else -> return null
         }
-        if (behavior == InlineHigherOrderResultMode.FILTER) {
+        if (behavior == CallSignature.ResultMode.FILTER) {
             listElementClassFromReceiverRef(ref.receiver)?.let { listElementClassBySlot[result.slot] = it }
         }
-        if (behavior == InlineHigherOrderResultMode.MAP) {
+        if (behavior == CallSignature.ResultMode.MAP) {
             lambdaRef.inferredReturnClass?.let { listElementClassBySlot[result.slot] = it }
         }
 
@@ -5418,14 +5358,14 @@ class BytecodeCompiler(
         val nextObj = ensureObjSlot(CompiledValue(nextSlot, SlotType.UNKNOWN))
         val bindings = prepareInlineLambdaBindingsFromValues(lambdaRef, listOf(nextObj)) ?: return null
         when (behavior) {
-            InlineHigherOrderResultMode.FOR_EACH -> {
+            CallSignature.ResultMode.FOR_EACH -> {
                 compileInlineLambdaBody(lambdaRef, inlineRef, bindings) ?: return null
             }
-            InlineHigherOrderResultMode.MAP -> {
+            CallSignature.ResultMode.MAP -> {
                 val mapped = compileInlineLambdaBody(lambdaRef, inlineRef, bindings) ?: return null
                 appendToList(result, mapped) ?: return null
             }
-            InlineHigherOrderResultMode.FILTER -> {
+            CallSignature.ResultMode.FILTER -> {
                 val predicate = compileInlineLambdaBody(lambdaRef, inlineRef, bindings) ?: return null
                 val predicateBool = compileValueAsBool(predicate)
                 val skipLabel = builder.label()
@@ -5436,7 +5376,7 @@ class BytecodeCompiler(
                 appendToList(result, nextObj) ?: return null
                 builder.mark(skipLabel)
             }
-            InlineHigherOrderResultMode.MAP_NOT_NULL -> {
+            CallSignature.ResultMode.MAP_NOT_NULL -> {
                 val mapped = compileInlineLambdaBody(lambdaRef, inlineRef, bindings) ?: return null
                 val mappedObj = ensureObjSlot(mapped)
                 val nullSlot = allocSlot()
@@ -5451,7 +5391,7 @@ class BytecodeCompiler(
                 appendToList(result, mappedObj) ?: return null
                 builder.mark(skipLabel)
             }
-            InlineHigherOrderResultMode.ASSOCIATE_BY -> {
+            CallSignature.ResultMode.ASSOCIATE_BY -> {
                 val key = compileInlineLambdaBody(lambdaRef, inlineRef, bindings) ?: return null
                 appendToMap(result, key, nextObj)
             }
@@ -5986,11 +5926,11 @@ class BytecodeCompiler(
         return names
     }
 
-    private fun resolveExtensionSlotByReceiverNames(
+    private fun resolveExtensionWrapperNameByReceiverNames(
         receiverClass: ObjClass,
         memberName: String,
         wrapperName: (String, String) -> String
-    ): CompiledValue? {
+    ): String? {
         for (receiverName in extensionReceiverTypeNames(receiverClass)) {
             val candidate = wrapperName(receiverName, memberName)
             if (allowedScopeNames != null &&
@@ -5999,15 +5939,15 @@ class BytecodeCompiler(
             ) {
                 continue
             }
-            resolveDirectNameSlot(candidate)?.let { return it }
+            if (resolveDirectNameSlot(candidate) != null) return candidate
         }
         return null
     }
 
-    private fun resolveUniqueExtensionWrapperSlot(
+    private fun resolveUniqueExtensionWrapperName(
         memberName: String,
         wrapperPrefix: String
-    ): CompiledValue? {
+    ): String? {
         val suffix = "__$memberName"
         val candidates = LinkedHashSet<String>()
         for (name in localSlotIndexByName.keys) {
@@ -6020,8 +5960,31 @@ class BytecodeCompiler(
                 candidates.add(name)
             }
         }
-        if (candidates.size != 1) return null
-        return resolveDirectNameSlot(candidates.first())
+        return candidates.singleOrNull()
+    }
+
+    private fun resolveExtensionSlotByReceiverNames(
+        receiverClass: ObjClass,
+        memberName: String,
+        wrapperName: (String, String) -> String
+    ): CompiledValue? {
+        val resolvedName = resolveExtensionWrapperNameByReceiverNames(receiverClass, memberName, wrapperName) ?: return null
+        return resolveDirectNameSlot(resolvedName)
+    }
+
+    private fun resolveUniqueExtensionWrapperSlot(
+        memberName: String,
+        wrapperPrefix: String
+    ): CompiledValue? {
+        val resolvedName = resolveUniqueExtensionWrapperName(memberName, wrapperPrefix) ?: return null
+        return resolveDirectNameSlot(resolvedName)
+    }
+
+    private fun extensionCallableSignature(receiverClass: ObjClass, memberName: String): CallSignature? {
+        val wrapperName = resolveExtensionWrapperNameByReceiverNames(receiverClass, memberName, ::extensionCallableName)
+            ?: resolveUniqueExtensionWrapperName(memberName, "__ext__")
+            ?: return null
+        return callSignatureByName[wrapperName]
     }
 
     private fun resolveExtensionCallableSlot(receiverClass: ObjClass, memberName: String): CompiledValue? {

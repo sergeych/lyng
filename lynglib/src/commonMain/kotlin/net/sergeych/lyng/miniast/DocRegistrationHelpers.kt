@@ -99,10 +99,11 @@ fun ObjClass.addFnDoc(
     visibility: Visibility = Visibility.Public,
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
+    callSignature: net.sergeych.lyng.CallSignature? = null,
     code: suspend ScopeFacade.() -> Obj
 ) {
     // Register runtime method
-    addFn(name, isOpen, visibility, code = code)
+    addFn(name, isOpen, visibility, callSignature = callSignature, code = code)
     // Register docs for the member under this class
     BuiltinDocRegistry.module(moduleName ?: ownerModuleNameFromClassOrUnknown()) {
         classDoc(this@addFnDoc.className, doc = "") {
@@ -137,9 +138,10 @@ fun ObjClass.addClassFnDoc(
     isOpen: Boolean = false,
     tags: Map<String, List<String>> = emptyMap(),
     moduleName: String? = null,
+    callSignature: net.sergeych.lyng.CallSignature? = null,
     code: suspend ScopeFacade.() -> Obj
 ) {
-    addClassFn(name, isOpen, code)
+    addClassFn(name, isOpen, callSignature, code)
     BuiltinDocRegistry.module(moduleName ?: ownerModuleNameFromClassOrUnknown()) {
         classDoc(this@addClassFnDoc.className, doc = "") {
             method(name = name, doc = doc, params = params, returns = returns, isStatic = true, tags = tags)

@@ -19,6 +19,7 @@ package net.sergeych.lyng.obj
 
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import net.sergeych.lyng.CallSignature
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lynon.LynonDecoder
@@ -262,7 +263,15 @@ class ObjMap(val map: MutableMap<Obj, Obj> = mutableMapOf()) : Obj() {
                 doc = "Get value by key or compute, store, and return the default from a lambda.",
                 params = listOf(ParamDoc("key"), ParamDoc("default")),
                 returns = type("lyng.Any"),
-                moduleName = "lyng.stdlib"
+                moduleName = "lyng.stdlib",
+                callSignature = CallSignature(
+                    inlineHigherOrder = CallSignature.HigherOrderInline(
+                        kind = CallSignature.Kind.MAP_GET_OR_PUT,
+                        result = CallSignature.ResultMode.BLOCK_RESULT,
+                        argCount = 2,
+                        lambdaArgIndex = 1
+                    )
+                )
             ) {
                 val key = requiredArg<Obj>(0)
                 thisAs<ObjMap>().map.getOrPut(key) {

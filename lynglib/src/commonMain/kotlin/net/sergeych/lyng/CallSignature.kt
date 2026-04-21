@@ -20,5 +20,30 @@ package net.sergeych.lyng
  * Compile-time call metadata for known functions. Used to select lambda receiver semantics.
  */
 data class CallSignature(
-    val tailBlockReceiverType: String? = null
-)
+    val tailBlockReceiverType: String? = null,
+    val inlineHigherOrder: HigherOrderInline? = null
+) {
+    data class HigherOrderInline(
+        val kind: Kind,
+        val result: ResultMode,
+        val argCount: Int = 1,
+        val lambdaArgIndex: Int = 0
+    )
+
+    enum class Kind {
+        UNARY_ARGUMENT,
+        RECEIVER,
+        ITERABLE,
+        MAP_GET_OR_PUT
+    }
+
+    enum class ResultMode {
+        BLOCK_RESULT,
+        RETURN_RECEIVER,
+        FOR_EACH,
+        MAP,
+        FILTER,
+        MAP_NOT_NULL,
+        ASSOCIATE_BY
+    }
+}

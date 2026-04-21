@@ -18,6 +18,7 @@
 package net.sergeych.lyng.obj
 
 import net.sergeych.lyng.Arguments
+import net.sergeych.lyng.CallSignature
 import net.sergeych.lyng.miniast.ParamDoc
 import net.sergeych.lyng.miniast.addFnDoc
 import net.sergeych.lyng.miniast.addPropertyDoc
@@ -189,7 +190,13 @@ val ObjIterable by lazy {
             doc = "Build a map from elements using the lambda result as key.",
             params = listOf(ParamDoc("keySelector")),
             returns = type("lyng.Map"),
-            moduleName = "lyng.stdlib"
+            moduleName = "lyng.stdlib",
+            callSignature = CallSignature(
+                inlineHigherOrder = CallSignature.HigherOrderInline(
+                    kind = CallSignature.Kind.ITERABLE,
+                    result = CallSignature.ResultMode.ASSOCIATE_BY
+                )
+            )
         ) {
             val association = requireOnlyArg<Obj>()
             val result = ObjMap()
@@ -204,7 +211,13 @@ val ObjIterable by lazy {
             doc = "Apply the lambda to each element in iteration order.",
             params = listOf(ParamDoc("action")),
             isOpen = true,
-            moduleName = "lyng.stdlib"
+            moduleName = "lyng.stdlib",
+            callSignature = CallSignature(
+                inlineHigherOrder = CallSignature.HigherOrderInline(
+                    kind = CallSignature.Kind.ITERABLE,
+                    result = CallSignature.ResultMode.FOR_EACH
+                )
+            )
         ) {
             val scope = requireScope()
             val it = thisObj.invokeInstanceMethod(scope, "iterator")
@@ -222,7 +235,13 @@ val ObjIterable by lazy {
             params = listOf(ParamDoc("transform")),
             returns = type("lyng.List"),
             isOpen = true,
-            moduleName = "lyng.stdlib"
+            moduleName = "lyng.stdlib",
+            callSignature = CallSignature(
+                inlineHigherOrder = CallSignature.HigherOrderInline(
+                    kind = CallSignature.Kind.ITERABLE,
+                    result = CallSignature.ResultMode.MAP
+                )
+            )
         ) {
             val fn = requiredArg<Obj>(0)
             val result = mutableListOf<Obj>()
@@ -238,7 +257,13 @@ val ObjIterable by lazy {
             params = listOf(ParamDoc("transform")),
             returns = type("lyng.List"),
             isOpen = true,
-            moduleName = "lyng.stdlib"
+            moduleName = "lyng.stdlib",
+            callSignature = CallSignature(
+                inlineHigherOrder = CallSignature.HigherOrderInline(
+                    kind = CallSignature.Kind.ITERABLE,
+                    result = CallSignature.ResultMode.MAP_NOT_NULL
+                )
+            )
         ) {
             val fn = requiredArg<Obj>(0)
             val result = mutableListOf<Obj>()

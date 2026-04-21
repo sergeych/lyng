@@ -849,6 +849,7 @@ open class ObjClass(
         fieldId: Int? = null,
         methodId: Int? = null,
         typeDecl: net.sergeych.lyng.TypeDecl? = null,
+        callSignature: net.sergeych.lyng.CallSignature? = null,
     ): ObjRecord {
         // Validation of override rules: only for non-system declarations
         var existing: ObjRecord? = null
@@ -949,6 +950,7 @@ open class ObjClass(
             isOverride = isOverride,
             isTransient = isTransient,
             type = type,
+            callSignature = callSignature,
             typeDecl = typeDecl,
             memberName = name,
             fieldId = effectiveFieldId,
@@ -975,7 +977,8 @@ open class ObjClass(
         isTransient: Boolean = false,
         type: ObjRecord.Type = ObjRecord.Type.Field,
         fieldId: Int? = null,
-        methodId: Int? = null
+        methodId: Int? = null,
+        callSignature: net.sergeych.lyng.CallSignature? = null
     ): ObjRecord {
         initClassScope()
         val existing = classScope!!.objects[name]
@@ -1016,6 +1019,7 @@ open class ObjClass(
             writeVisibility,
             recordType = type,
             isTransient = isTransient,
+            callSignature = callSignature,
             fieldId = effectiveFieldId,
             methodId = effectiveMethodId
         )
@@ -1035,6 +1039,7 @@ open class ObjClass(
         isOverride: Boolean = false,
         pos: Pos = Pos.builtIn,
         methodId: Int? = null,
+        callSignature: net.sergeych.lyng.CallSignature? = null,
         code: (suspend net.sergeych.lyng.ScopeFacade.() -> Obj)? = null
     ) {
         val stmt = code?.let { ObjExternCallable.fromBridge { it() } } ?: ObjNull
@@ -1042,7 +1047,8 @@ open class ObjClass(
             name, stmt, isMutable, visibility, writeVisibility, pos, declaringClass,
             isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride,
             type = ObjRecord.Type.Fun,
-            methodId = methodId
+            methodId = methodId,
+            callSignature = callSignature
         )
     }
 
@@ -1074,8 +1080,19 @@ open class ObjClass(
     }
 
     fun addClassConst(name: String, value: Obj) = createClassField(name, value)
-    fun addClassFn(name: String, isOpen: Boolean = false, code: suspend net.sergeych.lyng.ScopeFacade.() -> Obj) {
-        createClassField(name, ObjExternCallable.fromBridge { code() }, isOpen, type = ObjRecord.Type.Fun)
+    fun addClassFn(
+        name: String,
+        isOpen: Boolean = false,
+        callSignature: net.sergeych.lyng.CallSignature? = null,
+        code: suspend net.sergeych.lyng.ScopeFacade.() -> Obj
+    ) {
+        createClassField(
+            name,
+            ObjExternCallable.fromBridge { code() },
+            isOpen,
+            type = ObjRecord.Type.Fun,
+            callSignature = callSignature
+        )
     }
 
 

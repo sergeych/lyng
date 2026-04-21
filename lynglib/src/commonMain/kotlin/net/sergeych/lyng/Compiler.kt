@@ -187,6 +187,7 @@ class Compiler(
     private val callableReturnTypeByScopeId: MutableMap<Int, MutableMap<Int, ObjClass>> = mutableMapOf()
     private val callableReturnTypeByName: MutableMap<String, ObjClass> = mutableMapOf()
     private val callableReturnTypeDeclByName: MutableMap<String, TypeDecl> = mutableMapOf()
+    private val callSignatureByName: MutableMap<String, CallSignature> = mutableMapOf()
     private val lambdaReturnTypeByRef: MutableMap<ObjRef, ObjClass> = mutableMapOf()
     private val exactLambdaRefByScopeId: MutableMap<Int, MutableMap<Int, LambdaFnRef>> = mutableMapOf()
     private val lambdaCaptureEntriesByRef: MutableMap<ValueFnRef, List<net.sergeych.lyng.bytecode.LambdaCaptureEntry>> =
@@ -265,6 +266,11 @@ class Compiler(
                     if (plan.slots.containsKey(name)) continue
                     declareSlotNameIn(plan, name, record.isMutable, record.type == ObjRecord.Type.Delegated)
                     scopeSeedNames.add(name)
+                    record.callSignature?.let { signature ->
+                        if (!callSignatureByName.containsKey(name)) {
+                            callSignatureByName[name] = signature
+                        }
+                    }
                     if (record.typeDecl != null && nameTypeDecl[name] == null) {
                         nameTypeDecl[name] = record.typeDecl
                         if (nameObjClass[name] == null) {
@@ -291,6 +297,11 @@ class Compiler(
                                     )
                                     scopeSeedNames.add(getterName)
                                 }
+                                record.callSignature?.let { signature ->
+                                    if (!callSignatureByName.containsKey(getterName)) {
+                                        callSignatureByName[getterName] = signature
+                                    }
+                                }
                                 val prop = record.value as? ObjProperty
                                 if (prop?.setter != null) {
                                     val setterName = extensionPropertySetterName(cls.className, name)
@@ -315,6 +326,11 @@ class Compiler(
                                         isDelegated = false
                                     )
                                     scopeSeedNames.add(callableName)
+                                }
+                                record.callSignature?.let { signature ->
+                                    if (!callSignatureByName.containsKey(callableName)) {
+                                        callSignatureByName[callableName] = signature
+                                    }
                                 }
                             }
                         }
@@ -347,6 +363,11 @@ class Compiler(
                 record.type == ObjRecord.Type.Delegated
             )
             scopeSeedNames.add(name)
+            record.callSignature?.let { signature ->
+                if (!callSignatureByName.containsKey(name)) {
+                    callSignatureByName[name] = signature
+                }
+            }
             if (record.typeDecl != null && nameTypeDecl[name] == null) {
                 nameTypeDecl[name] = record.typeDecl
                 if (nameObjClass[name] == null) {
@@ -760,6 +781,29 @@ class Compiler(
         seedScope?.getLocalRecordDirect(name)?.callSignature?.let { return it }
         return seedScope?.get(name)?.callSignature
             ?: importManager.rootScope.getLocalRecordDirect(name)?.callSignature
+    }
+
+    private fun declaredCallSignature(name: String, extTypeName: String?, actualExtern: Boolean): CallSignature? {
+        val imported = if (actualExtern) {
+            importManager.rootScope.getLocalRecordDirect(name)?.callSignature
+        } else {
+            null
+        }
+        val inferred = when {
+            extTypeName == "Iterable" && name == "filter" -> CallSignature(
+                inlineHigherOrder = CallSignature.HigherOrderInline(
+                    kind = CallSignature.Kind.ITERABLE,
+                    result = CallSignature.ResultMode.FILTER
+                )
+            )
+            else -> null
+        }
+        return when {
+            imported == null -> inferred
+            inferred == null -> imported
+            imported.inlineHigherOrder != null -> imported
+            else -> imported.copy(inlineHigherOrder = inferred.inlineHigherOrder)
+        }
     }
 
     internal data class MemberIds(val fieldId: Int?, val methodId: Int?)
@@ -1429,6 +1473,11 @@ class Compiler(
     }
 
     private fun seedImportTypeMetadata(name: String, record: ObjRecord) {
+        record.callSignature?.let { signature ->
+            if (!callSignatureByName.containsKey(name)) {
+                callSignatureByName[name] = signature
+            }
+        }
         if (record.typeDecl != null && nameTypeDecl[name] == null) {
             nameTypeDecl[name] = record.typeDecl
         }
@@ -1904,6 +1953,7 @@ class Compiler(
                         enumEntriesByName = enumEntriesByName,
                         callableReturnTypeByScopeId = callableReturnTypeByScopeId,
                         callableReturnTypeByName = callableReturnTypeByName,
+                        callSignatureByName = callSignatureByName,
                         externBindingNames = externBindingNames,
                         preparedModuleBindingNames = importBindings.keys,
                         scopeRefPosByName = moduleReferencePosByName,
@@ -2260,6 +2310,7 @@ class Compiler(
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
+            callSignatureByName = callSignatureByName,
             externCallableNames = externCallableNames,
             externBindingNames = externBindingNames,
             preparedModuleBindingNames = importBindings.keys,
@@ -2294,6 +2345,7 @@ class Compiler(
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
+            callSignatureByName = callSignatureByName,
             externCallableNames = externCallableNames,
             externBindingNames = externBindingNames,
             preparedModuleBindingNames = importBindings.keys,
@@ -2353,6 +2405,7 @@ class Compiler(
             enumEntriesByName = enumEntriesByName,
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
+            callSignatureByName = callSignatureByName,
             externCallableNames = externCallableNames,
             externBindingNames = externBindingNames,
             preparedModuleBindingNames = importBindings.keys,
@@ -9208,7 +9261,7 @@ class Compiler(
         val extensionWrapperName = extTypeName?.let { extensionCallableName(it, name) }
         val classCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
         var memberMethodId = if (extTypeName == null) classCtx?.memberMethodIds?.get(name) else null
-        val externCallSignature = if (actualExtern) importManager.rootScope.getLocalRecordDirect(name)?.callSignature else null
+        val externCallSignature = declaredCallSignature(name, extTypeName, actualExtern)
 
         val declKind = if (parentContext is CodeContext.ClassBody) SymbolKind.MEMBER else SymbolKind.FUNCTION
         resolutionSink?.declareSymbol(name, declKind, isMutable = false, pos = nameStartPos, isOverride = isOverride)
@@ -9230,7 +9283,9 @@ class Compiler(
         }
         if (extensionWrapperName != null) {
             declareLocalName(extensionWrapperName, isMutable = false)
+            externCallSignature?.let { callSignatureByName[extensionWrapperName] = it }
         }
+        externCallSignature?.let { callSignatureByName[name] = it }
         if (actualExtern && declKind != SymbolKind.MEMBER) {
             externCallableNames.add(name)
         }

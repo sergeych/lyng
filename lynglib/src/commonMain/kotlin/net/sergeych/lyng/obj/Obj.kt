@@ -828,7 +828,13 @@ open class Obj {
                 name = "let",
                 doc = "Calls the specified function block with `this` value as its argument and returns its result.",
                 params = listOf(ParamDoc("block")),
-                moduleName = "lyng.stdlib"
+                moduleName = "lyng.stdlib",
+                callSignature = CallSignature(
+                    inlineHigherOrder = CallSignature.HigherOrderInline(
+                        kind = CallSignature.Kind.UNARY_ARGUMENT,
+                        result = CallSignature.ResultMode.BLOCK_RESULT
+                    )
+                )
             ) {
                 call(args.firstAndOnly(), Arguments(thisObj))
             }
@@ -836,7 +842,13 @@ open class Obj {
                 name = "apply",
                 doc = "Calls the specified function block with `this` value as its receiver and returns `this` value.",
                 params = listOf(ParamDoc("block")),
-                moduleName = "lyng.stdlib"
+                moduleName = "lyng.stdlib",
+                callSignature = CallSignature(
+                    inlineHigherOrder = CallSignature.HigherOrderInline(
+                        kind = CallSignature.Kind.RECEIVER,
+                        result = CallSignature.ResultMode.RETURN_RECEIVER
+                    )
+                )
             ) {
                 val body = args.firstAndOnly()
                 val scope = requireScope()
@@ -852,7 +864,13 @@ open class Obj {
                 name = "also",
                 doc = "Calls the specified function block with `this` value as its argument and returns `this` value.",
                 params = listOf(ParamDoc("block")),
-                moduleName = "lyng.stdlib"
+                moduleName = "lyng.stdlib",
+                callSignature = CallSignature(
+                    inlineHigherOrder = CallSignature.HigherOrderInline(
+                        kind = CallSignature.Kind.UNARY_ARGUMENT,
+                        result = CallSignature.ResultMode.RETURN_RECEIVER
+                    )
+                )
             ) {
                 call(args.firstAndOnly(), Arguments(thisObj))
                 thisObj
@@ -861,7 +879,13 @@ open class Obj {
                 name = "run",
                 doc = "Calls the specified function block with `this` value as its receiver and returns its result.",
                 params = listOf(ParamDoc("block")),
-                moduleName = "lyng.stdlib"
+                moduleName = "lyng.stdlib",
+                callSignature = CallSignature(
+                    inlineHigherOrder = CallSignature.HigherOrderInline(
+                        kind = CallSignature.Kind.RECEIVER,
+                        result = CallSignature.ResultMode.BLOCK_RESULT
+                    )
+                )
             ) {
                 call(args.firstAndOnly())
             }

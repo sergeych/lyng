@@ -118,7 +118,14 @@ internal suspend fun executeFunctionDecl(
             scope.addExtension(
                 type,
                 spec.name,
-                ObjRecord(ObjUnset, isMutable = false, visibility = spec.visibility, declaringClass = null, type = ObjRecord.Type.Delegated).apply {
+                ObjRecord(
+                    ObjUnset,
+                    isMutable = false,
+                    visibility = spec.visibility,
+                    declaringClass = null,
+                    type = ObjRecord.Type.Delegated,
+                    callSignature = spec.externCallSignature
+                ).apply {
                     delegate = finalDelegate
                 }
             )
@@ -135,7 +142,8 @@ internal suspend fun executeFunctionDecl(
                 null,
                 spec.startPos,
                 isTransient = spec.isTransient,
-                type = ObjRecord.Type.Delegated
+                type = ObjRecord.Type.Delegated,
+                callSignature = spec.externCallSignature
             ).apply {
                 delegate = finalDelegate
             }
@@ -204,6 +212,7 @@ internal suspend fun executeFunctionDecl(
                 visibility = spec.visibility,
                 pos = spec.startPos,
                 type = ObjRecord.Type.Fun,
+                callSignature = spec.externCallSignature,
             )
         } else {
             scope.addExtension(
@@ -215,6 +224,7 @@ internal suspend fun executeFunctionDecl(
                     visibility = spec.visibility,
                     declaringClass = null,
                     type = ObjRecord.Type.Fun,
+                    callSignature = spec.externCallSignature,
                     typeDecl = spec.typeDecl
                 )
             )
@@ -227,6 +237,7 @@ internal suspend fun executeFunctionDecl(
             wrapper,
             spec.visibility,
             recordType = ObjRecord.Type.Fun,
+            callSignature = spec.externCallSignature,
             typeDecl = spec.typeDecl
         )
     } ?: run {
@@ -245,7 +256,8 @@ internal suspend fun executeFunctionDecl(
                 isOverride = spec.isOverride,
                 type = ObjRecord.Type.Fun,
                 methodId = spec.memberMethodId,
-                typeDecl = spec.typeDecl
+                typeDecl = spec.typeDecl,
+                callSignature = spec.externCallSignature
             )
             val memberValue = cls.members[spec.name]?.value ?: compiledFnBody
             scope.addItem(
