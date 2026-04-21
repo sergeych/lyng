@@ -256,6 +256,54 @@ class CompilerVmReviewRegressionTest {
     }
 
     @Test
+    fun directLambdaInliningMatchesImplicitItInvocationSemantics() = runTest {
+        val script = Compiler.compile(
+            Source(
+                "<direct-inline-it-semantics>",
+                """
+                val zeroFn = { if (it == void) 1 else 0 }
+                val multiFn = { it }
+                val zero = zeroFn()
+                val multi = multiFn(1, 2, 3)
+                [zero, multi]
+                """.trimIndent()
+            ),
+            Script.defaultImportManager
+        )
+
+        val scope = Script.newScope()
+        val result = script.execute(scope) as ObjList
+
+        assertEquals(1, result.list[0].toInt())
+        val multi = result.list[1] as ObjList
+        assertEquals(listOf(1, 2, 3), multi.list.map { it.toInt() })
+    }
+
+    @Test
+    fun mapGetOrPutUsesInlineDefaultLambda() = runTest {
+        val script = Compiler.compile(
+            Source(
+                "<map-get-or-put-inline>",
+                """
+                val offset = 10
+                val m = Map()
+                val first = m.getOrPut("k") { offset + 1 }
+                val second = m.getOrPut("k") { offset + 2 }
+                [first, second, m["k"]]
+                """.trimIndent()
+            ),
+            Script.defaultImportManager
+        )
+
+        val scope = Script.newScope()
+        val result = script.execute(scope) as ObjList
+
+        assertEquals(11, result.list[0].toInt())
+        assertEquals(11, result.list[1].toInt())
+        assertEquals(11, result.list[2].toInt())
+    }
+
+    @Test
     fun subjectlessWhenReportsScriptError() = runTest {
         val ex = assertFailsWith<ScriptError> {
             Compiler.compile(
