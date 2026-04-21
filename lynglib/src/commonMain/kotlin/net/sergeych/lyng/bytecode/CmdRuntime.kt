@@ -57,6 +57,39 @@ class CmdVm {
     suspend fun execute(fn: CmdFunction, scope0: Scope, args: List<Obj>): Obj {
         return execute(fn, scope0, Arguments.from(args))
     }
+
+    suspend fun executeFastOnly(
+        fn: CmdFunction,
+        scope0: Scope,
+        args: Arguments,
+        binder: ((CmdFrame, Arguments) -> Unit)? = null
+    ): Obj {
+        require(fn.fastOnly) { "fast-only execution requested for non-fast function ${fn.name}" }
+        result = null
+        val frame = CmdFrame(this, fn, scope0, args.list)
+        frame.applyCaptureRecords()
+        binder?.invoke(frame, args)
+        val cmds = fn.cmds
+        while (true) {
+            try {
+                while (result == null) {
+                    val cmd = cmds[frame.ip++]
+                    if (!cmd.performFast(frame)) {
+                        error("fast-only command not supported: ${cmd::class.simpleName}")
+                    }
+                }
+                break
+            } catch (e: Throwable) {
+                val throwable = frame.normalizeThrowable(e)
+                if (!frame.handleException(throwable)) {
+                    frame.cancelIterators()
+                    throw throwable
+                }
+            }
+        }
+        frame.cancelIterators()
+        return result ?: ObjVoid
+    }
 }
 
 sealed class Cmd {
@@ -280,6 +313,11 @@ class CmdMakeRange(
 }
 
 class CmdConstNull(internal val dst: Int) : Cmd() {
+    override fun performFast(frame: CmdFrame): Boolean {
+        frame.setObj(dst, ObjNull)
+        return true
+    }
+
     override suspend fun perform(frame: CmdFrame) {
         frame.setObj(dst, ObjNull)
         return
@@ -2301,6 +2339,11 @@ class CmdJmpIfGteIntLocal(internal val a: Int, internal val b: Int, internal val
 }
 
 class CmdRet(internal val slot: Int) : Cmd() {
+    override fun performFast(frame: CmdFrame): Boolean {
+        frame.vm.result = frame.storedSlotObj(slot)
+        return true
+    }
+
     override suspend fun perform(frame: CmdFrame) {
         frame.vm.result = frame.slotToObj(slot)
         return
@@ -2322,6 +2365,11 @@ class CmdRetLabel(internal val labelId: Int, internal val slot: Int) : Cmd() {
 }
 
 class CmdRetVoid : Cmd() {
+    override fun performFast(frame: CmdFrame): Boolean {
+        frame.vm.result = ObjVoid
+        return true
+    }
+
     override suspend fun perform(frame: CmdFrame) {
         frame.vm.result = ObjVoid
         return
@@ -3220,7 +3268,12 @@ class CmdCallDirect(
         val result = if (PerfFlags.SCOPE_POOL) {
             frame.ensureScope().withChildFrame(args) { child -> callee.callOn(child) }
         } else {
-            callee.callOn(frame.ensureScope().createChildScope(frame.ensureScope().pos, args = args))
+            val scope = frame.ensureScope()
+            if (callee is BytecodeLambdaCallable && callee.supportsDirectInvokeFastPath()) {
+                callee.invokeWithArgs(scope, args)
+            } else {
+                callee.callOn(scope.createChildScope(scope.pos, args = args))
+            }
         }
         frame.storeObjResult(dst, result)
         return
@@ -3258,7 +3311,11 @@ class CmdCallSlot(
                     scope.raiseIllegalState("bytecode runtime cannot call non-bytecode Statement")
                 }
             }
-            callee.callOn(scope.createChildScope(scope.pos, args = args))
+            if (callee is BytecodeLambdaCallable && callee.supportsDirectInvokeFastPath()) {
+                callee.invokeWithArgs(scope, args)
+            } else {
+                callee.callOn(scope.createChildScope(scope.pos, args = args))
+            }
         }
         frame.storeObjResult(dst, result)
         return
@@ -3343,6 +3400,8 @@ class CmdListFillInt(
         for (i in 0 until size) {
             val value = if (callable is BytecodeLambdaCallable && callable.supportsImplicitIntFillFastPath()) {
                 callable.invokeImplicitIntArg(scope, i.toLong())
+            } else if (callable is BytecodeLambdaCallable && callable.supportsDirectInvokeFastPath()) {
+                callable.invokeWithArgs(scope, Arguments(ObjInt.of(i.toLong())))
             } else {
                 callable.callOn(scope.createChildScope(scope.pos, args = Arguments(ObjInt.of(i.toLong()))))
             }
@@ -3862,6 +3921,7 @@ class CmdMakeLambda(internal val id: Int, internal val dst: Int) : Cmd() {
             captureNames = lambdaConst.captureNames,
             paramSlotPlan = lambdaConst.paramSlotPlan,
             argsDeclaration = lambdaConst.argsDeclaration,
+            supportsDirectInvokeFastPath = lambdaConst.supportsDirectInvokeFastPath,
             preferredThisType = lambdaConst.preferredThisType,
             returnLabels = lambdaConst.returnLabels,
             pos = lambdaConst.pos
@@ -3883,10 +3943,18 @@ class BytecodeLambdaCallable(
     private val captureNames: List<String>,
     private val paramSlotPlan: Map<String, Int>,
     private val argsDeclaration: ArgsDeclaration?,
+    private val supportsDirectInvokeFastPath: Boolean,
     private val preferredThisType: String?,
     private val returnLabels: Set<String>,
     override val pos: Pos,
 ) : Statement(), BytecodeCallable {
+    private val slotPlanByName: Map<String, Int> by lazy(LazyThreadSafetyMode.NONE) { fn.localSlotPlanByName() }
+    private val declaredLocalNames: Set<String> by lazy(LazyThreadSafetyMode.NONE) {
+        fn.constants
+            .mapNotNull { it as? BytecodeConst.LocalDecl }
+            .mapTo(mutableSetOf()) { it.name }
+    }
+
     private fun freezeRecord(record: ObjRecord): ObjRecord {
         if (record.isMutable) return record
         val raw = record.value as Obj?
@@ -3918,6 +3986,7 @@ class BytecodeLambdaCallable(
             captureNames = captureNames,
             paramSlotPlan = paramSlotPlan,
             argsDeclaration = argsDeclaration,
+            supportsDirectInvokeFastPath = supportsDirectInvokeFastPath,
             preferredThisType = preferredThisType,
             returnLabels = returnLabels,
             pos = pos
@@ -3934,6 +4003,7 @@ class BytecodeLambdaCallable(
             captureNames = captureNames,
             paramSlotPlan = paramSlotPlan,
             argsDeclaration = argsDeclaration,
+            supportsDirectInvokeFastPath = supportsDirectInvokeFastPath,
             preferredThisType = preferredThisType,
             returnLabels = returnLabels,
             pos = pos
@@ -3942,9 +4012,27 @@ class BytecodeLambdaCallable(
 
     fun supportsImplicitIntFillFastPath(): Boolean = argsDeclaration == null
 
-    suspend fun invokeImplicitIntArg(scope: Scope, arg: Long): Obj {
-        val context = scope.applyClosureForBytecode(closureScope, preferredThisType).also {
-            it.args = Arguments.EMPTY
+    fun supportsDirectInvokeFastPath(): Boolean = supportsDirectInvokeFastPath
+
+    private val supportsFastUndeclaredLocalInit: Boolean by lazy(LazyThreadSafetyMode.NONE) {
+        val parameterSlots = paramSlotPlan.values.toHashSet()
+        fn.localSlotNames.indices.all { localIndex ->
+            val name = fn.localSlotNames[localIndex] ?: return@all true
+            if (declaredLocalNames.contains(name)) return@all true
+            if (fn.localSlotCaptures.getOrNull(localIndex) == true) return@all true
+            parameterSlots.contains(fn.scopeSlotCount + localIndex)
+        }
+    }
+
+    private fun supportsFastOnlyVm(arguments: Arguments): Boolean {
+        if (!supportsDirectInvokeFastPath || !fn.fastOnly) return false
+        if (!supportsFastUndeclaredLocalInit) return false
+        return argsDeclaration == null || argsDeclaration.supportsFastFrameBinding(arguments)
+    }
+
+    private fun buildContext(callScope: Scope, args: Arguments): Scope {
+        val context = callScope.applyClosureForBytecode(closureScope, preferredThisType).also {
+            it.args = args
         }
         if (captureRecords != null) {
             context.captureRecords = captureRecords
@@ -3952,97 +4040,128 @@ class BytecodeLambdaCallable(
         } else if (captureNames.isNotEmpty()) {
             closureScope.raiseIllegalState("bytecode lambda capture records missing")
         }
-        val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, _ ->
-            paramSlotPlan["it"]?.let { itSlot ->
+        return context
+    }
+
+    private fun bindArgumentsFast(frame: CmdFrame, context: Scope, arguments: Arguments) {
+        if (argsDeclaration == null) {
+            val l = arguments.list
+            val itValue: Obj = when (l.size) {
+                0 -> ObjVoid
+                1 -> l[0]
+                else -> ObjList(l.toMutableList())
+            }
+            val itSlot = slotPlanByName["it"]
+            if (itSlot != null) {
+                when (itValue) {
+                    is ObjInt -> frame.frame.setInt(itSlot, itValue.value)
+                    is ObjReal -> frame.frame.setReal(itSlot, itValue.value)
+                    is ObjBool -> frame.frame.setBool(itSlot, itValue.value)
+                    else -> frame.frame.setObj(itSlot, itValue)
+                }
+            }
+        } else {
+            argsDeclaration.assignToFrameFast(
+                context,
+                arguments,
+                slotPlanByName,
+                frame.frame
+            )
+        }
+    }
+
+    private suspend fun bindArguments(frame: CmdFrame, context: Scope, arguments: Arguments) {
+        if (argsDeclaration == null) {
+            bindArgumentsFast(frame, context, arguments)
+        } else {
+            argsDeclaration.assignToFrame(
+                context,
+                arguments,
+                slotPlanByName,
+                frame.frame
+            )
+        }
+    }
+
+    private suspend fun seedUndeclaredLocals(frame: CmdFrame, context: Scope) {
+        val localNames = frame.fn.localSlotNames
+        for (i in localNames.indices) {
+            val name = localNames[i] ?: continue
+            if (declaredLocalNames.contains(name)) continue
+            val slotType = frame.getLocalSlotTypeCode(i)
+            if (slotType != SlotType.UNKNOWN.code && slotType != SlotType.OBJ.code) {
+                continue
+            }
+            if (slotType == SlotType.OBJ.code && frame.frame.getRawObj(i) != null) {
+                continue
+            }
+            val record = context.getLocalRecordDirect(name)
+                ?: context.parent?.get(name)
+                ?: context.get(name)
+                ?: continue
+            val value =
+                if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is ObjProperty) {
+                    context.resolve(record, name)
+                } else {
+                    when (val direct = record.value) {
+                        is FrameSlotRef -> direct.read()
+                        is RecordSlotRef -> direct.read(context, name)
+                        is ScopeSlotRef -> direct.read()
+                        else -> direct
+                    }
+                }
+            frame.frame.setObj(i, value)
+        }
+    }
+
+    suspend fun invokeImplicitIntArg(scope: Scope, arg: Long): Obj {
+        val context = buildContext(scope, Arguments.EMPTY)
+        val fastBinder: (CmdFrame, Arguments) -> Unit = { frame, _ ->
+            slotPlanByName["it"]?.let { itSlot ->
                 frame.frame.setInt(itSlot, arg)
             }
         }
         return try {
-            CmdVm().execute(fn, context, Arguments.EMPTY, binder)
+            val vm = CmdVm()
+            if (supportsFastOnlyVm(Arguments.EMPTY)) {
+                vm.executeFastOnly(fn, context, Arguments.EMPTY, fastBinder)
+            } else {
+                val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, _ ->
+                    slotPlanByName["it"]?.let { itSlot ->
+                        frame.frame.setInt(itSlot, arg)
+                    }
+                }
+                vm.execute(fn, context, Arguments.EMPTY, binder)
+            }
         } catch (e: ReturnException) {
             if (e.label == null || returnLabels.contains(e.label)) e.result
             else throw e
         }
     }
 
-    override suspend fun execute(scope: Scope): Obj {
-        val context = scope.applyClosureForBytecode(closureScope, preferredThisType).also {
-            it.args = scope.args
-        }
-        if (captureRecords != null) {
-            context.captureRecords = captureRecords
-            context.captureNames = captureNames
-        } else if (captureNames.isNotEmpty()) {
-            closureScope.raiseIllegalState("bytecode lambda capture records missing")
-        }
-        if (argsDeclaration == null) {
-            // Bound in the bytecode entry binder.
-        } else {
-            // args bound into frame slots in the bytecode entry binder
-        }
+    suspend fun invokeWithArgs(scope: Scope, args: Arguments): Obj {
+        val context = buildContext(scope, args)
         return try {
-            val declaredNames = fn.constants
-                .mapNotNull { it as? BytecodeConst.LocalDecl }
-                .mapTo(mutableSetOf()) { it.name }
-            val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, arguments ->
-                val slotPlan = fn.localSlotPlanByName()
-                if (argsDeclaration == null) {
-                    val l = arguments.list
-                    val itValue: Obj = when (l.size) {
-                        0 -> ObjVoid
-                        1 -> l[0]
-                        else -> ObjList(l.toMutableList())
-                    }
-                    val itSlot = slotPlan["it"]
-                    if (itSlot != null) {
-                        when (itValue) {
-                            is ObjInt -> frame.frame.setInt(itSlot, itValue.value)
-                            is ObjReal -> frame.frame.setReal(itSlot, itValue.value)
-                            is ObjBool -> frame.frame.setBool(itSlot, itValue.value)
-                            else -> frame.frame.setObj(itSlot, itValue)
-                        }
-                    }
-                } else {
-                    argsDeclaration.assignToFrame(
-                        context,
-                        arguments,
-                        slotPlan,
-                        frame.frame
-                    )
+            val vm = CmdVm()
+            if (supportsFastOnlyVm(args)) {
+                val binder: (CmdFrame, Arguments) -> Unit = { frame, arguments ->
+                    bindArgumentsFast(frame, context, arguments)
                 }
-                val localNames = frame.fn.localSlotNames
-                for (i in localNames.indices) {
-                    val name = localNames[i] ?: continue
-                    if (declaredNames.contains(name)) continue
-                    val slotType = frame.getLocalSlotTypeCode(i)
-                    if (slotType != SlotType.UNKNOWN.code && slotType != SlotType.OBJ.code) {
-                        continue
-                    }
-                    if (slotType == SlotType.OBJ.code && frame.frame.getRawObj(i) != null) {
-                        continue
-                    }
-                    val record = context.getLocalRecordDirect(name)
-                        ?: context.parent?.get(name)
-                        ?: context.get(name)
-                        ?: continue
-                    val value =
-                        if (record.type == ObjRecord.Type.Delegated || record.type == ObjRecord.Type.Property || record.value is ObjProperty) {
-                            context.resolve(record, name)
-                        } else {
-                            when (val direct = record.value) {
-                                is FrameSlotRef -> direct.read()
-                                is RecordSlotRef -> direct.read(context, name)
-                                is ScopeSlotRef -> direct.read()
-                                else -> direct
-                            }
-                        }
-                    frame.frame.setObj(i, value)
+                vm.executeFastOnly(fn, context, args, binder)
+            } else {
+                val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, arguments ->
+                    bindArguments(frame, context, arguments)
+                    seedUndeclaredLocals(frame, context)
                 }
+                vm.execute(fn, context, args, binder)
             }
-            CmdVm().execute(fn, context, scope.args, binder)
         } catch (e: ReturnException) {
             if (e.label == null || returnLabels.contains(e.label)) e.result else throw e
         }
+    }
+
+    override suspend fun execute(scope: Scope): Obj {
+        return invokeWithArgs(scope, scope.args)
     }
 }
 

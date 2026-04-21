@@ -31,6 +31,7 @@ class LambdaFnRef(
     val captureEntries: List<LambdaCaptureEntry>,
     val inferredReturnClass: ObjClass?,
     val inlineBodyRef: ObjRef?,
+    val supportsDirectInvokeFastPath: Boolean,
     val preferredThisType: String?,
     val wrapAsExtensionCallable: Boolean,
     val returnLabels: Set<String>,

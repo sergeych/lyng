@@ -17,6 +17,7 @@
 
 package net.sergeych.lyng
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
@@ -40,9 +41,11 @@ class OptTest {
         repeat(3) { pass ->
             val size = scope.eval("buildArray(200000)").toInt()
             assertEquals(200000, size, "warmup pass ${pass + 1} failed")
+            delay(100)
         }
 
-        val passes = 3
+
+        val passes = 4
         var bestMs = Long.MAX_VALUE
         var totalMs = 0L
         repeat(passes) { pass ->

@@ -112,6 +112,7 @@ class CmdBuilder {
             }
             cmds.add(createCmd(ins.op, operands, scopeSlotCount, localSlotCaptures))
         }
+        val cmdArray = cmds.toTypedArray()
         return CmdFunction(
             name = name,
             localCount = localCount,
@@ -128,8 +129,9 @@ class CmdBuilder {
             localSlotDelegated = localSlotDelegated,
             localSlotCaptures = localSlotCaptures,
             constants = constPool.toList(),
-            cmds = cmds.toTypedArray(),
-            posByIp = posByInstr.toTypedArray()
+            cmds = cmdArray,
+            posByIp = posByInstr.toTypedArray(),
+            fastOnly = computeFastOnlyBytecode(scopeSlotCount, cmdArray)
         )
     }
 

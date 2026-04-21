@@ -434,6 +434,57 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         }
     }
 
+    fun supportsFastFrameBinding(arguments: Arguments): Boolean {
+        if (arguments.named.isNotEmpty() || arguments.tailBlockMode) return false
+        return params.none { it.isEllipsis || it.defaultValue != null }
+    }
+
+    fun assignToFrameFast(
+        scope: Scope,
+        arguments: Arguments = scope.args,
+        paramSlotPlan: Map<String, Int>,
+        frame: FrameAccess,
+        slotOffset: Int = 0
+    ) {
+        if (!supportsFastFrameBinding(arguments)) {
+            scope.raiseIllegalState("fast frame binding is not supported for this call shape")
+        }
+
+        fun slotFor(name: String): Int {
+            val full = paramSlotPlan[name] ?: scope.raiseIllegalState("parameter slot for '$name' is missing")
+            val slot = full - slotOffset
+            if (slot < 0) scope.raiseIllegalState("parameter slot for '$name' is out of range")
+            return slot
+        }
+
+        fun assign(slot: Int, value: Obj) {
+            when (value) {
+                is net.sergeych.lyng.obj.ObjInt -> frame.setInt(slot, value.value)
+                is net.sergeych.lyng.obj.ObjReal -> frame.setReal(slot, value.value)
+                is net.sergeych.lyng.obj.ObjBool -> frame.setBool(slot, value.value)
+                else -> frame.setObj(slot, value)
+            }
+        }
+
+        if (arguments.list.size > params.size) {
+            scope.raiseIllegalArgument("expected ${params.size} arguments, got ${arguments.list.size}")
+        }
+        if (arguments.list.size < params.size) {
+            for (i in arguments.list.size until params.size) {
+                val a = params[i]
+                if (!a.type.isNullable) {
+                    scope.raiseIllegalArgument("expected ${params.size} arguments, got ${arguments.list.size}")
+                }
+            }
+        }
+
+        for (i in params.indices) {
+            val slot = slotFor(params[i].name)
+            val value = if (i < arguments.list.size) arguments.list[i] else ObjNull
+            assign(slot, value.byValueCopy())
+        }
+    }
+
     /**
      * Single argument declaration descriptor.
      *

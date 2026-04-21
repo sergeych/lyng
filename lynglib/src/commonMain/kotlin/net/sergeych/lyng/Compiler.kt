@@ -3545,6 +3545,11 @@ class Compiler(
         }
         val bytecodeFn = (fnStatements as? BytecodeStatement)?.bytecodeFunction()
         val inlineBodyRef = argsDeclaration?.let { null } ?: extractInlineLambdaBodyRef(body)
+        val supportsDirectInvokeFastPath = bytecodeFn != null &&
+            bytecodeFn.scopeSlotCount == 0 &&
+            expectedReceiverType == null &&
+            !wrapAsExtensionCallable &&
+            !containsDelegatedRefs(body)
         val ref = LambdaFnRef(
             valueFn = { closureScope ->
             val captureRecords = closureScope.captureRecords
@@ -3628,6 +3633,7 @@ class Compiler(
             captureEntries = captureEntries,
             inferredReturnClass = returnClass,
             inlineBodyRef = inlineBodyRef,
+            supportsDirectInvokeFastPath = supportsDirectInvokeFastPath,
             preferredThisType = expectedReceiverType,
             wrapAsExtensionCallable = wrapAsExtensionCallable,
             returnLabels = returnLabels,

@@ -40,6 +40,7 @@ sealed class BytecodeConst {
         val captureNames: List<String>,
         val paramSlotPlan: Map<String, Int>,
         val argsDeclaration: ArgsDeclaration?,
+        val supportsDirectInvokeFastPath: Boolean,
         val preferredThisType: String?,
         val wrapAsExtensionCallable: Boolean,
         val returnLabels: Set<String>,

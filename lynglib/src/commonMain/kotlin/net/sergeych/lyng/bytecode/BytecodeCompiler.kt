@@ -899,6 +899,7 @@ class BytecodeCompiler(
                     captureNames = captureNames,
                     paramSlotPlan = ref.paramSlotPlan,
                     argsDeclaration = ref.argsDeclaration,
+                    supportsDirectInvokeFastPath = ref.supportsDirectInvokeFastPath,
                     preferredThisType = ref.preferredThisType,
                     wrapAsExtensionCallable = ref.wrapAsExtensionCallable,
                     returnLabels = ref.returnLabels,
