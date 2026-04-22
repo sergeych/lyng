@@ -18,10 +18,12 @@
 #
 
 upload_only=false
+target=vps   # default: new server; use --old for d.lynglang.com
 for arg in "$@"; do
   if [[ "$arg" == "-u" || "$arg" == "--upload-only" ]]; then
     upload_only=true
-    break
+  elif [[ "$arg" == "--old" ]]; then
+    target=com
   fi
 done
 
@@ -88,19 +90,20 @@ function updateIdeaPluginDownloadLink() {
   fi
 }
 
-# default target settings
-case "com" in
+# target settings  (-t com | -t vps)
+case "$target" in
   com)
-    SSH_HOST=sergeych@d.lynglang.com # host to deploy to
-    SSH_PORT=22                             # ssh port on it
-    ROOT=/bigstore/sergeych_pub/lyng                 # directory to rsync to
+    SSH_HOST=sergeych@d.lynglang.com
+    SSH_PORT=22
+    ROOT=/bigstore/sergeych_pub/lyng
     ;;
-#  com)
-#    SSH_HOST=vvk@front-01.neurodatalab.com
-#    ROOT=/home/vvk
-#    ;;
+  vps)
+    SSH_HOST=sergeych@94.130.36.94
+    SSH_PORT=22
+    ROOT=/var/www/lynglang
+    ;;
   *)
-    echo "*** ERROR: target not specified (use deploy com | dev)"
+    echo "*** ERROR: unknown target '$target' (use -t com | -t vps)"
     echo "*** stop"
     exit 101
 esac

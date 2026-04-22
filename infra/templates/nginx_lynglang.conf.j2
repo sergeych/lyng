@@ -1,0 +1,24 @@
+server {
+    listen 80;
+    server_name {{ domain }} www.{{ domain }};
+
+    root {{ web_root }}/release/dist;
+    index index.html;
+
+    # SPA fallback
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Distributables served directly
+    location /distributables/ {
+        try_files $uri =404;
+        autoindex on;
+    }
+
+    # Long-lived cache for hashed assets
+    location ~* \.(js|css|woff2?|ttf|eot|svg|png|jpg|ico)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+}

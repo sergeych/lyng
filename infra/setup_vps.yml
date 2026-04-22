@@ -1,0 +1,100 @@
+---
+- name: Setup lynglang.com static site on VPS
+  hosts: vps
+  become: yes
+  vars:
+    domain: lynglang.com
+    web_root: /var/www/lynglang
+    deploy_user: sergeych
+    certbot_email: real.sergeych@gmail.com
+
+  tasks:
+    # Debian 10 buster is EOL; security/backports repos moved to archive.debian.org
+    - name: Fix sources.list for Debian buster EOL
+      copy:
+        dest: /etc/apt/sources.list
+        content: |
+          deb http://archive.debian.org/debian/ buster main contrib non-free
+          deb http://archive.debian.org/debian-security/ buster/updates main contrib non-free
+          deb http://archive.debian.org/debian/ buster-backports main contrib non-free
+
+    - name: Remove stale third-party sources (broken for buster EOL)
+      file:
+        path: "/etc/apt/sources.list.d/{{ item }}"
+        state: absent
+      loop:
+        - cassandra.list
+        - icinga.list
+        - postgres.list
+        - salt-stack.list
+        - yarn.list
+
+    - name: Install nginx, certbot, and python3-certbot-nginx
+      apt:
+        name:
+          - nginx
+          - certbot
+          - python3-certbot-nginx
+        state: present
+        update_cache: yes
+
+    - name: Create web root directory
+      file:
+        path: "{{ web_root }}/release/dist"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: www-data
+        mode: "0755"
+        recurse: yes
+
+    - name: Create distributables directory
+      file:
+        path: "{{ web_root }}/release/dist/distributables"
+        state: directory
+        owner: "{{ deploy_user }}"
+        group: www-data
+        mode: "0755"
+
+    - name: Deploy nginx site config (HTTP, pre-certbot)
+      template:
+        src: templates/nginx_lynglang.conf.j2
+        dest: /etc/nginx/sites-available/{{ domain }}
+      notify: reload nginx
+
+    - name: Enable nginx site
+      file:
+        src: /etc/nginx/sites-available/{{ domain }}
+        dest: /etc/nginx/sites-enabled/{{ domain }}
+        state: link
+      notify: reload nginx
+
+    - name: Disable default nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: reload nginx
+
+    - name: Ensure nginx is started
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Reload nginx before certbot
+      meta: flush_handlers
+
+    - name: Obtain SSL certificate via certbot (--nginx plugin)
+      command: >
+        certbot --nginx
+        -d {{ domain }} -d www.{{ domain }}
+        --non-interactive --agree-tos
+        --email {{ certbot_email }}
+        --redirect
+      args:
+        creates: /etc/letsencrypt/live/{{ domain }}/fullchain.pem
+
+  handlers:
+    - name: reload nginx
+      service:
+        name: nginx
+        state: reloaded
