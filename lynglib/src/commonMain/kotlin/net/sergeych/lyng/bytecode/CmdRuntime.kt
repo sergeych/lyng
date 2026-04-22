@@ -2204,8 +2204,8 @@ class CmdAssignOpObj(
         }
         if (result == null) {
             val name = (frame.fn.constants.getOrNull(nameId) as? BytecodeConst.StringVal)?.value
-            if (name != null) frame.ensureScope().raiseIllegalAssignment("symbol is readonly: $name")
-            frame.ensureScope().raiseIllegalAssignment("symbol is readonly")
+            if (name != null) frame.ensureScope().raiseIllegalAssignment("can't reassign val $name")
+            frame.ensureScope().raiseIllegalAssignment("can't reassign val")
         }
         frame.storeObjResult(dst, result)
         return
@@ -4552,7 +4552,7 @@ class CmdFrame(
                                 type = inherited.type
                             )
                             copied.delegate = inherited.delegate
-                            return@mapIndexed copied
+                            return@mapIndexed freezeImmutableCaptureRecord(copied)
                         }
                     }
                     val isMutable = fn.localSlotMutables.getOrNull(localIndex) ?: false
@@ -4576,11 +4576,13 @@ class CmdFrame(
                             val record = findNamedExistingRecord(scope, name)
                             if (record != null) {
                                 val value = record.value
-                                return@mapIndexed when (value) {
+                                return@mapIndexed freezeImmutableCaptureRecord(
+                                    when (value) {
                                     is FrameSlotRef -> ObjRecord(value, isMutable)
                                     is RecordSlotRef -> ObjRecord(value, isMutable)
                                     else -> ObjRecord(value, isMutable)
-                                }
+                                    }
+                                )
                             }
                             if (hasNamedScopeBinding(scope, name)) {
                                 throw ScriptError(
@@ -4589,11 +4591,13 @@ class CmdFrame(
                                 )
                             }
                         }
-                        when (raw) {
-                            is FrameSlotRef -> ObjRecord(raw, isMutable)
-                            is RecordSlotRef -> ObjRecord(raw, isMutable)
-                            else -> ObjRecord(FrameSlotRef(frame, localIndex), isMutable)
-                        }
+                        freezeImmutableCaptureRecord(
+                            when (raw) {
+                                is FrameSlotRef -> ObjRecord(raw, isMutable)
+                                is RecordSlotRef -> ObjRecord(raw, isMutable)
+                                else -> ObjRecord(FrameSlotRef(frame, localIndex), isMutable)
+                            }
+                        )
                     }
                 }
 

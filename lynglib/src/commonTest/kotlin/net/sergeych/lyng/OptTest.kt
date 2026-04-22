@@ -90,4 +90,48 @@ class OptTest {
         }
         assertContains(ex.errorMessage, "can't reassign val a")
     }
+
+    @Test
+    fun testAssignOpErrorMessageFromExample() = runTest {
+        val source = Source(
+            "examples/error1.lyng",
+            """
+                val a = 1
+                a += 2
+            """.trimIndent()
+        )
+
+        val ex = assertFailsWith<ScriptError> {
+            Script.newScope().eval(source)
+        }
+
+        assertContains(ex.errorMessage, "can't reassign val a")
+    }
+
+    @Test
+    fun testClosuresInLaunchPool() = runTest {
+        eval($$"""
+            val result = Set()
+            val mu = Mutex()
+            fn doSomething(value) {
+                delay(100)
+                println(value)
+                mu.withLock {
+                    result += value
+                }
+            }
+
+            val lp = LaunchPool(4, 1000)
+            for (i in 1 .. 10) {
+                val ii: Int = i
+                lp.launch {
+                    doSomething( ii )
+                }
+            }
+            println("all tasks were placed into lauchpool")
+            lp.closeAndJoin()
+            println("ALL DONE: $result")
+            assertEquals((1..10).toSet(), result)
+        """.trimIndent())
+    }
 }
