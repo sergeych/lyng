@@ -2559,11 +2559,7 @@ class BytecodeCompiler(
                 return value
             }
             if (!localTarget.isMutable || localTarget.isDelegated) {
-                val msgId = builder.addConst(BytecodeConst.StringVal("can't reassign val ${localTarget.name}"))
-                val msgSlot = allocSlot()
-                builder.emit(Opcode.CONST_OBJ, msgId, msgSlot)
-                val posId = builder.addConst(BytecodeConst.PosVal(localTarget.pos()))
-                builder.emit(Opcode.THROW, posId, msgSlot)
+                emitImmutableLocalReassignError(localTarget.name, localTarget.pos())
                 return value
             }
             val slot = resolveCapturedOwnerScopeSlot(localTarget)
@@ -2607,12 +2603,8 @@ class BytecodeCompiler(
                 return value
             }
             if (!isMutable) {
-                val msgId = builder.addConst(BytecodeConst.StringVal("can't reassign val $nameTarget"))
-                val msgSlot = allocSlot()
-                builder.emit(Opcode.CONST_OBJ, msgId, msgSlot)
                 val pos = (ref.target as? LocalVarRef)?.pos() ?: Pos.builtIn
-                val posId = builder.addConst(BytecodeConst.PosVal(pos))
-                builder.emit(Opcode.THROW, posId, msgSlot)
+                emitImmutableLocalReassignError(nameTarget, pos)
                 return value
             }
             if (slot < scopeSlotCount && value.type != SlotType.UNKNOWN) {
@@ -3904,7 +3896,10 @@ class BytecodeCompiler(
                 val errorSlot = emitLoopVarReassignError(target.name, target.pos())
                 return CompiledValue(errorSlot, SlotType.OBJ)
             }
-            if (!target.isMutable) return null
+            if (!target.isMutable) {
+                val errorSlot = emitImmutableLocalReassignError(target.name, target.pos())
+                return CompiledValue(errorSlot, SlotType.OBJ)
+            }
             if (target.isDelegated) {
                 val slot = resolveSlot(target) ?: return null
                 if (slot < scopeSlotCount) return null
@@ -4076,6 +4071,10 @@ class BytecodeCompiler(
             val resolved = resolveAssignableSlotByName(varTarget.name)
             if (resolved != null && isLoopVarSlot(resolved.first)) {
                 val errorSlot = emitLoopVarReassignError(varTarget.name, varTarget.pos())
+                return CompiledValue(errorSlot, SlotType.OBJ)
+            }
+            if (resolved != null && !resolved.second) {
+                val errorSlot = emitImmutableLocalReassignError(varTarget.name, varTarget.pos())
                 return CompiledValue(errorSlot, SlotType.OBJ)
             }
         }
@@ -8432,6 +8431,15 @@ class BytecodeCompiler(
 
     private fun emitLoopVarReassignError(name: String, pos: Pos): Int {
         val msgId = builder.addConst(BytecodeConst.StringVal("can't reassign loop variable $name"))
+        val msgSlot = allocSlot()
+        builder.emit(Opcode.CONST_OBJ, msgId, msgSlot)
+        val posId = builder.addConst(BytecodeConst.PosVal(pos))
+        builder.emit(Opcode.THROW, posId, msgSlot)
+        return msgSlot
+    }
+
+    private fun emitImmutableLocalReassignError(name: String, pos: Pos): Int {
+        val msgId = builder.addConst(BytecodeConst.StringVal("can't reassign val $name"))
         val msgSlot = allocSlot()
         builder.emit(Opcode.CONST_OBJ, msgId, msgSlot)
         val posId = builder.addConst(BytecodeConst.PosVal(pos))

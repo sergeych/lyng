@@ -17,12 +17,12 @@
 
 package net.sergeych.lyng
 
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.obj.toInt
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
-import kotlin.time.Duration.Companion.milliseconds
+import kotlin.test.assertFailsWith
 import kotlin.time.TimeSource
 
 class OptTest {
@@ -42,7 +42,6 @@ class OptTest {
         repeat(3) { pass ->
             val size = scope.eval("buildArray(200000)").toInt()
             assertEquals(200000, size, "warmup pass ${pass + 1} failed")
-            delay(100)
         }
 
 
@@ -80,5 +79,15 @@ class OptTest {
         """.trimIndent()
         )
     }
-}
 
+    @Test
+    fun testErrorMessage() = runTest {
+        val ex = assertFailsWith<ScriptError> {
+            eval("""
+                val a = 1
+                a++
+            """.trimIndent())
+        }
+        assertContains(ex.errorMessage, "can't reassign val a")
+    }
+}
