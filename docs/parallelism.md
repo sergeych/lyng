@@ -36,6 +36,17 @@ This example shows how to launch a coroutine with `launch` which returns [Deferr
 
 Launch has the only argument which should be a callable (lambda usually) that is run in parallel (or cooperatively in parallel), and return anything as the result.
 
+When you have an iterable of deferreds, use `joinAll()` to await all of them and collect results in input order:
+
+    val jobs = (1..4).map { n ->
+        launch {
+            delay(1)
+            n * 10
+        }
+    }
+    assertEquals([10, 20, 30, 40], jobs.joinAll())
+    >>> void
+
 If you no longer need the result, cancel the deferred. Awaiting a cancelled deferred throws `CancellationException`:
 
     var reached = false
@@ -269,7 +280,7 @@ val jobs = (1..20).map { n ->
 }
 pool.closeAndJoin()               // wait for all tasks to complete
 
-val results = jobs.map { (it as Deferred).await() }
+val results = jobs.joinAll()
 ```
 
 Exceptions thrown inside a submitted lambda are captured in the returned `Deferred` and do not crash the pool, so other tasks continue running normally.

@@ -48,7 +48,7 @@ assertEquals(A.E.One, A.One)
 
 - [Language home](https://lynglang.com)
 - [introduction and tutorial](docs/tutorial.md) - start here please
-- [Latest release notes (1.5.4)](docs/whats_new.md)
+- [Latest release notes (1.5.5)](docs/whats_new.md)
 - [What's New in 1.5](docs/whats_new_1_5.md)
 - [Testing and Assertions](docs/Testing.md)
 - [Filesystem and Processes (lyngio)](docs/lyngio.md)
@@ -66,7 +66,7 @@ assertEquals(A.E.One, A.One)
 ### Add dependency to your project
 
 ```kotlin
-val lyngVersion = "1.5.4"
+val lyngVersion = "1.5.5"
 
 repositories {
     // ...
@@ -186,7 +186,7 @@ Designed to add scripting to kotlin multiplatform application in easy and effici
 
 # Language Roadmap
 
-The current stable release is **v1.5.4**: the 1.5 cycle is feature-complete, compiler/runtime stabilization work is in, and the language, tooling, and site are aligned around the current release.
+The current stable release is **v1.5.5**: the 1.5 cycle now includes the database/date/concurrency additions as well as the latest compiler/runtime stabilization work, and the language, tooling, and site are aligned around this release.
 
 Ready features:
 

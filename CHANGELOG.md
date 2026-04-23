@@ -9,24 +9,46 @@ History note:
 
 ## Unreleased
 
-### Database access
-- Added the portable `lyng.io.db` SQL contract and the first concrete provider, `lyng.io.db.sqlite`.
-- Added SQLite support on JVM and Linux Native with:
-  - generic `openDatabase("sqlite:...")` dispatch
-  - typed `openSqlite(...)` helper
-  - real nested transactions via savepoints
-  - generated keys through `ExecutionResult.getGeneratedKeys()`
-  - strict schema-driven value conversion for `Bool`, `Decimal`, `Date`, `DateTime`, and `Instant`
-  - documented option handling for `readOnly`, `createIfMissing`, `foreignKeys`, and `busyTimeoutMillis`
-- Added public docs for database usage and SQLite provider behavior.
+- No unreleased entries yet.
 
-### Time
-- Added `Date` to `lyng.time` and the core library as a first-class calendar-date type.
-- Added `Instant.toDate(...)`, `DateTime.date`, `DateTime.toDate()`, `Date.toDateTime(...)`, and related date arithmetic.
-- Added docs, stdlib reference updates, serialization support, and comprehensive tests for `Date`.
+## 1.5.5 (2026-04-23)
+
+### Concurrency and collections
+- Added coroutine coordination primitives and helpers for everyday parallel code:
+  - `Channel` for coroutine-to-coroutine communication
+  - `LaunchPool` for bounded-concurrency task execution
+  - `Iterable<Deferred>.joinAll()` to await a whole collection of deferreds in input order
+  - `CompletableDeferred.completeExceptionally(...)` and `Deferred.cancelAndJoin()`
+- Added docs and examples for the new concurrency APIs, including `joinAll()` coverage in iterable and parallelism references.
+
+### Database and time APIs
+- Added the portable `lyng.io.db` SQL contract and the first concrete providers:
+  - `lyng.io.db.sqlite` on JVM and Linux Native
+  - `lyng.io.db.jdbc` on JVM
+- Added SQLite/JDBC release hardening:
+  - nested transactions via savepoints
+  - detached materialized rows
+  - generated-key support through `ExecutionResult.getGeneratedKeys()`
+  - schema-driven value conversion for `Bool`, `Decimal`, `Date`, `DateTime`, and `Instant`
+  - portable SQLite linker/deployment fixes and documented runtime options
+- Added `Date` to `lyng.time` and the core runtime as a first-class calendar-date type, plus conversions and arithmetic across `Instant`, `DateTime`, and `Date`.
+
+### Language, stdlib, and tooling
+- Added extensions on singleton `object` declarations, including object-scoped indexer overrides for bracket syntax.
+- Added backtick string literals and formatter support.
+- Added `lyng.legacy_digest` for SHA-1 compatibility work, `String.replace`, and `buffer.base64std`.
+- Improved CLI/runtime behavior with `atExit` shutdown handlers, native release-binary work, and follow-up CLI packaging/import fixes.
+- Expanded docs across the tutorial, stdlib references, database docs, networking docs, and release notes.
+
+### Runtime/compiler stability and performance
+- Extended exact-call and higher-order lambda inlining through the bytecode compiler, including compiled fast paths for simple lambdas, wrappers, captures, and common higher-order helpers.
+- Fixed import caching and class/object bytecode dispatch on JVM.
+- Fixed immutable `val` compound assignments so true mutating `*Assign` operations continue to work while fallback reassignments report the correct read-only error.
+- Fixed closure/capture and import regressions across launched loops, singleton/object extensions, aliasing, transitive re-exports, and immutable capture escaping.
+- Improved list-fill/list-append fast paths, nullable-let inference, Decimal/Complex interop, and related regression coverage.
 
 ### Release notes
-- Full `:lyngio:jvmTest` and `:lyngio:linuxX64Test` pass on the release tree after SQLite hardening.
+- Release metadata, homepage samples, docs, and README now point to `1.5.5`.
 
 ## 1.5.4 (2026-04-03)
 

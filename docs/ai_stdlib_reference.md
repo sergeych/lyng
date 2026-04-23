@@ -18,6 +18,7 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 - Async/concurrency: `launch`, `yield`, `flow`, `delay`.
   - `Deferred.cancel()` cancels an active task.
   - `Deferred.await()` throws `CancellationException` if that task was cancelled.
+  - `Iterable<Deferred>.joinAll()` awaits every deferred in iteration order and returns a `List` of results.
 - Math: `floor`, `ceil`, `round`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `asinh`, `acosh`, `atanh`, `exp`, `ln`, `log10`, `log2`, `pow`, `sqrt`, `abs`, `clamp`.
   - These helpers also accept `lyng.decimal.Decimal`.
   - Exact Decimal path today: `abs`, `floor`, `ceil`, `round`, and `pow` with integral exponent.

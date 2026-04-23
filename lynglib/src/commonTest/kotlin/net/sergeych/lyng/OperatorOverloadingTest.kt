@@ -19,6 +19,8 @@ package net.sergeych.lyng
 
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertContains
+import kotlin.test.assertFailsWith
 
 class OperatorOverloadingTest {
     @Test
@@ -64,6 +66,24 @@ class OperatorOverloadingTest {
     }
 
     @Test
+    fun testBuiltinListPlusAssignOnVal() = runTest {
+        eval("""
+            val list = [1, 2]
+            list += 3
+            assertEquals([1, 2, 3], list)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testBuiltinListMinusAssignOnVal() = runTest {
+        eval("""
+            val list = [1, 2, 3]
+            list -= 2
+            assertEquals([1, 3], list)
+        """.trimIndent())
+    }
+
+    @Test
     fun testPlusAssignFallback() = runTest {
         eval("""
             class Vector(var x: Int, var y: Int) {
@@ -74,6 +94,130 @@ class OperatorOverloadingTest {
             v += Vector(3, 4)
             assertEquals(Vector(4, 6), v)
         """.trimIndent())
+    }
+
+    @Test
+    fun testPlusAssignFallbackOnValReportsReadonlyError() = runTest {
+        val ex = assertFailsWith<ScriptError> {
+            eval("""
+                class Vector(var x: Int, var y: Int) {
+                    fun plus(other: Vector) = Vector(this.x + other.x, this.y + other.y)
+                    fun equals(other: Vector) = this.x == other.x && this.y == other.y
+                }
+                val v = Vector(1, 2)
+                v += Vector(3, 4)
+            """.trimIndent())
+        }
+
+        assertContains(ex.errorMessage, "can't reassign val v")
+    }
+
+    @Test
+    fun testMinusAssignOverloadingOnVal() = runTest {
+        eval("""
+            class Counter(var n: Int) {
+                fun minusAssign(x: Int) { this.n = this.n - x }
+            }
+            val c = Counter(10)
+            c -= 3
+            assertEquals(7, c.n)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testMinusAssignFallbackOnValReportsReadonlyError() = runTest {
+        val ex = assertFailsWith<ScriptError> {
+            eval("""
+                class Counter(var n: Int) {
+                    fun minus(x: Int) = Counter(this.n - x)
+                }
+                val c = Counter(10)
+                c -= 3
+            """.trimIndent())
+        }
+
+        assertContains(ex.errorMessage, "can't reassign val c")
+    }
+
+    @Test
+    fun testMulAssignOverloadingOnVal() = runTest {
+        eval("""
+            class Counter(var n: Int) {
+                fun mulAssign(x: Int) { this.n = this.n * x }
+            }
+            val c = Counter(10)
+            c *= 3
+            assertEquals(30, c.n)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testMulAssignFallbackOnValReportsReadonlyError() = runTest {
+        val ex = assertFailsWith<ScriptError> {
+            eval("""
+                class Counter(var n: Int) {
+                    fun times(x: Int) = Counter(this.n * x)
+                }
+                val c = Counter(10)
+                c *= 3
+            """.trimIndent())
+        }
+
+        assertContains(ex.errorMessage, "can't reassign val c")
+    }
+
+    @Test
+    fun testDivAssignOverloadingOnVal() = runTest {
+        eval("""
+            class Counter(var n: Int) {
+                fun divAssign(x: Int) { this.n = this.n / x }
+            }
+            val c = Counter(21)
+            c /= 3
+            assertEquals(7, c.n)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testDivAssignFallbackOnValReportsReadonlyError() = runTest {
+        val ex = assertFailsWith<ScriptError> {
+            eval("""
+                class Counter(var n: Int) {
+                    fun div(x: Int) = Counter(this.n / x)
+                }
+                val c = Counter(21)
+                c /= 3
+            """.trimIndent())
+        }
+
+        assertContains(ex.errorMessage, "can't reassign val c")
+    }
+
+    @Test
+    fun testModAssignOverloadingOnVal() = runTest {
+        eval("""
+            class Counter(var n: Int) {
+                fun modAssign(x: Int) { this.n = this.n % x }
+            }
+            val c = Counter(23)
+            c %= 5
+            assertEquals(3, c.n)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testModAssignFallbackOnValReportsReadonlyError() = runTest {
+        val ex = assertFailsWith<ScriptError> {
+            eval("""
+                class Counter(var n: Int) {
+                    fun mod(x: Int) = Counter(this.n % x)
+                }
+                val c = Counter(23)
+                c %= 5
+            """.trimIndent())
+        }
+
+        assertContains(ex.errorMessage, "can't reassign val c")
     }
 
     @Test

@@ -55,6 +55,23 @@ Here is the sample:
     assertEquals( (1..3).joinToString { it * 10 }, "10 20 30")
     >>> void
 
+## joinAll
+
+`joinAll()` is an `Iterable<Deferred>` helper that awaits every deferred in iteration order and returns a `List`
+with the collected results.
+
+    val jobs = (1..4).map { n ->
+        launch { n * n }
+    }
+    assertEquals([1, 4, 9, 16], jobs.joinAll())
+    >>> void
+
+Notes:
+
+- it does not start any task by itself; it only awaits the deferreds already present in the iterable.
+- awaiting happens in iteration order, so the result list keeps the same order as the input iterable.
+- if any deferred fails or was cancelled, that `await()` error is propagated from `joinAll()`.
+
 ## `sum` and `sumOf`
 
 These, again, does the thing:
@@ -184,6 +201,7 @@ Search for the first element that satisfies the given predicate:
 | sortedWith(comparator) | sort using a comparator that compares elements (1)                              |
 | sortedBy(predicate)    | sort by comparing results of the predicate function                             |
 | joinToString(s,t)      | convert iterable to string, see (2)                                             |
+| joinAll()              | for `Iterable<Deferred>`, await all items in order and collect results to [List] |
 | reversed()             | create a list containing items from this in reverse order                       |
 | shuffled()             | create a list of shuffled elements                                              |
 

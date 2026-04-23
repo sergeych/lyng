@@ -73,13 +73,13 @@ pool.closeAndJoin()
 
 ## Collecting all results
 
-`launch` returns a `Deferred`, so you can collect results via `map`:
+`launch` returns a `Deferred`, so you can collect results with `joinAll()`:
 
 ```lyng
 val pool = LaunchPool(4)
 val jobs = (1..10).map { n -> pool.launch { n * n } }
 pool.closeAndJoin()
-val results = jobs.map { (it as Deferred).await() }
+val results = jobs.joinAll()
 // results == [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
 ```
 

@@ -1,26 +1,29 @@
 # What's New in Lyng
 
-This document highlights the current Lyng release, **1.5.4**, and the broader additions from the 1.5 cycle.
+This document highlights the current Lyng release, **1.5.5**, and the broader additions from the 1.5 cycle.
 It is intentionally user-facing: new language features, new modules, new tools, and the practical things you can build with them.
 For a programmer-focused migration summary across 1.5.x, see `docs/whats_new_1_5.md`.
 
-## Release 1.5.4 Highlights
+## Release 1.5.5 Highlights
 
-- `1.5.4` is the stabilization release for the 1.5 feature set.
+- `1.5.5` extends the 1.5 line with practical database APIs, first-class calendar dates, and better coroutine building blocks.
 - The 1.5 line now brings together richer ranges and loops, interpolation, math modules, immutable and observable collections, richer `lyngio`, and much better CLI/IDE support.
-- `1.5.4` specifically fixes user-visible issues around decimal arithmetic, mixed numeric flows, list behavior, and observable list hooks.
-- `1.5.4` also fixes extension-member registration for named singleton `object` declarations, so `fun X.foo()` and `val X.bar` now work as expected.
-- `1.5.4` also lets named singleton `object` declarations use scoped indexer extensions with bracket syntax, so patterns like `Storage["name"]` can be implemented with `override fun Storage.getAt(...)` / `putAt(...)`.
+- `1.5.5` adds `Channel`, `LaunchPool`, and `joinAll()` so coroutine-heavy scripts can coordinate work more directly.
+- `1.5.5` adds `Date`, the portable `lyng.io.db` layer, SQLite/JDBC providers, and a compatibility `lyng.legacy_digest` module.
+- `1.5.5` also continues runtime/compiler hardening with better import dispatch, faster exact lambda calls, and correct `val +=`/`-=` behavior for mutating types versus real reassignment.
 - The docs, homepage samples, and release metadata now point at the current stable version.
 
 ## User Highlights Across 1.5.x
 
 - Descending ranges and loops with `downTo` / `downUntil`
 - String interpolation with `$name` and `${expr}`
+- Backtick string literals for raw-ish string text
 - Decimal arithmetic, matrices/vectors, and complex numbers
 - Calendar `Date` support in `lyng.time`
+- `Channel`, `LaunchPool`, and `joinAll()` for coroutine workflows
 - Immutable collections and opt-in `ObservableList`
-- Rich `lyngio` modules for SQLite databases, console, HTTP, WebSocket, TCP, and UDP
+- Rich `lyngio` modules for SQLite/JDBC databases, console, HTTP, WebSocket, TCP, and UDP
+- Legacy SHA-1 compatibility helpers in `lyng.legacy_digest`
 - CLI improvements including the built-in formatter `lyng fmt`
 - Better IDE support and stronger docs around the released feature set
 
@@ -324,7 +327,7 @@ Singleton objects are declared using the `object` keyword. They provide a conven
 
 ```lyng
 object Config {
-    val version = "1.5.4"
+    val version = "1.5.5"
     fun show() = println("Config version: " + version)
 }
 

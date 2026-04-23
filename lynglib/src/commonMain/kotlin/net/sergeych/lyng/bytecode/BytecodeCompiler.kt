@@ -2881,14 +2881,18 @@ class BytecodeCompiler(
             val slot = resolveCapturedOwnerScopeSlot(localTarget) ?: resolveSlot(localTarget) ?: return null
             val targetType = slotTypes[slot] ?: SlotType.OBJ
             if (!localTarget.isMutable) {
-                if (targetType != SlotType.OBJ && targetType != SlotType.UNKNOWN) return compileEvalRef(ref)
                 val rhs = compileRef(ref.value) ?: return compileEvalRef(ref)
+                if (!shouldUseAssignOpForImmutableLocal(slot, targetType, ref.op)) {
+                    emitImmutableLocalReassignError(localTarget.name, localTarget.pos())
+                    return rhs
+                }
                 val rhsObj = ensureObjSlot(rhs)
                 val nameId = builder.addConst(BytecodeConst.StringVal(localTarget.name))
                 if (nameId > 0xFFFF) return compileEvalRef(ref)
                 val dst = allocSlot()
                 builder.emit(Opcode.ASSIGN_OP_OBJ, ref.op.ordinal, slot, rhsObj.slot, dst, nameId)
                 updateSlotType(dst, SlotType.OBJ)
+                slotObjClass[slot]?.let { slotObjClass[dst] = it }
                 return CompiledValue(dst, SlotType.OBJ)
             }
             var rhs = compileRef(ref.value) ?: return compileEvalRef(ref)
@@ -8445,6 +8449,38 @@ class BytecodeCompiler(
         val posId = builder.addConst(BytecodeConst.PosVal(pos))
         builder.emit(Opcode.THROW, posId, msgSlot)
         return msgSlot
+    }
+
+    private fun assignOpMethodName(op: BinOp): String? = when (op) {
+        BinOp.PLUS -> "plusAssign"
+        BinOp.MINUS -> "minusAssign"
+        BinOp.STAR -> "mulAssign"
+        BinOp.SLASH -> "divAssign"
+        BinOp.PERCENT -> "modAssign"
+        else -> null
+    }
+
+    private fun knownBuiltinAssignOpSupport(cls: ObjClass, op: BinOp): Boolean? = when (cls) {
+        ObjList.type -> op == BinOp.PLUS || op == BinOp.MINUS
+        ObjObservableList.type -> op == BinOp.PLUS || op == BinOp.MINUS
+        ObjSet.type -> op == BinOp.PLUS
+        ObjMap.type -> op == BinOp.PLUS
+        ObjRingBuffer.type -> op == BinOp.PLUS
+        else -> null
+    }
+
+    private fun shouldUseAssignOpForImmutableLocal(slot: Int, targetType: SlotType, op: BinOp): Boolean {
+        return when (targetType) {
+            SlotType.INT, SlotType.REAL, SlotType.BOOL -> false
+            SlotType.OBJ, SlotType.UNKNOWN -> {
+                val cls = slotObjClass[slot] ?: return true
+                val methodName = assignOpMethodName(op)
+                if (methodName != null && cls.getInstanceMemberOrNull(methodName, includeStatic = false) != null) {
+                    return true
+                }
+                knownBuiltinAssignOpSupport(cls, op) ?: true
+            }
+        }
     }
     private fun binaryLeft(ref: BinaryOpRef): ObjRef = ref.left
     private fun binaryRight(ref: BinaryOpRef): ObjRef = ref.right
