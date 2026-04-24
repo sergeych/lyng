@@ -18,14 +18,13 @@
 package net.sergeych.lynon
 
 import net.sergeych.lyng.Scope
-import net.sergeych.lyng.requireOnlyArg
-import net.sergeych.lyng.requireScope
+import net.sergeych.lyng.serialization.ObjSerializationFormatClass
 import net.sergeych.lyng.obj.*
 
 // Most often used types:
 
 
-object ObjLynonClass : ObjClass("Lynon") {
+object ObjLynonClass : ObjSerializationFormatClass("Lynon") {
 
     suspend fun encodeAny(scope: Scope, obj: Obj): ObjBitBuffer {
         val bout = MemoryBitOutput()
@@ -41,15 +40,9 @@ object ObjLynonClass : ObjClass("Lynon") {
         return deserializer.decodeAny(scope)
     }
 
-    init {
-        addClassConst("test", ObjString("test_const"))
-        addClassFn("encode") {
-            encodeAny(requireScope(), requireOnlyArg<Obj>())
-        }
-        addClassFn("decode") {
-            decodeAny(requireScope(), requireOnlyArg<Obj>())
-        }
-    }
+    override suspend fun encodeValue(scope: Scope, value: Obj): Obj = encodeAny(scope, value)
+
+    override suspend fun decodeValue(scope: Scope, encoded: Obj): Obj = decodeAny(scope, encoded)
 }
 
 /**

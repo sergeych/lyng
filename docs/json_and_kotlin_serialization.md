@@ -1,9 +1,25 @@
 # Json support
 
-Since 1.0.5 we start adding JSON support. Versions 1,0,6* support serialization of the basic types, including lists and
-maps, and simple classes. Multiple inheritance may produce incorrect results, it is work in progress.
+Lyng now has two distinct JSON-facing layers:
 
-## Serialization in Lyng
+- plain JSON projection:
+  - `Obj.toJson()`
+  - `Obj.toJsonString()`
+- canonical JSON round-trip format:
+  - `Json.encode(value)`
+  - `Json.decode(text)`
+
+Use the first when you need ordinary JSON for interop.
+
+Use the second when you need Lyng value round-trip semantics through JSON text.
+
+This distinction is intentional:
+
+- plain JSON projection is optimized for compatibility with ordinary JSON tooling
+- canonical `Json.encode()` is optimized for semantic fidelity to Lyng and Lynon
+- these goals conflict for values such as sets, exceptions, singleton objects, buffers, and maps with non-string keys
+
+## Plain JSON projection in Lyng
 
     // in lyng
     assertEquals("{\"a\":1}", {a: 1}.toJsonString())
@@ -20,7 +36,8 @@ Simple classes serialization is supported:
     assertEquals( "{\"foo\":1,\"bar\":2}", Point(1,2).toJsonString() )
     >>> void
 
-Note that mutable members are serialized by default. You can exclude any member (including constructor parameters) from JSON serialization using the `@Transient` attribute:
+Note that mutable members are serialized by default. You can exclude any member (including constructor parameters) from
+JSON serialization using the `@Transient` attribute:
 
     import lyng.serialization
     
@@ -31,7 +48,7 @@ Note that mutable members are serialized by default. You can exclude any member 
     assertEquals( "{\"bar\":2,\"visible\":100}", Point2(1,2).toJsonString() )
     >>> void
 
-Note that if you override json serialization:
+Note that if you override plain JSON serialization:
 
     import lyng.serialization
     
@@ -46,8 +63,8 @@ Note that if you override json serialization:
     assertEquals( "{\"custom\":true}", Point2(1,2).toJsonString() )
     >>> void
 
-Custom serialization of user classes is possible by overriding `toJsonObject` method. It must return an object which is
-serializable to Json. Most often it is a map, but any object is accepted, that makes it very flexible:
+Custom serialization of user classes is possible by overriding `toJsonObject`. It must return an object which is
+serializable to JSON. Most often it is a map, but any object is accepted:
 
     import lyng.serialization
     
@@ -70,12 +87,49 @@ serializable to Json. Most often it is a map, but any object is accepted, that m
 Please note that `toJsonString` should be used to get serialized string representation of the object. Don't call
 `toJsonObject` directly, it is not intended to be used outside the serialization library.
 
+## Canonical Json round-trip format
+
+`Json.encode()` and `Json.decode()` are now the JSON equivalents of `Lynon.encode()` and `Lynon.decode()`.
+
+They still use JSON text, but they add Lyng-specific type tags where plain JSON would otherwise lose information.
+
+Example:
+
+```lyng
+import lyng.serialization
+import lyng.time
+
+enum Color { Red, Green }
+class Point(x,y) { var z = 42 }
+
+val p = Point(1,2)
+p.z = 99
+
+val value = List(
+    p,
+    Map([1, "one"], ["two", 2]),
+    Set(1,2,3),
+    "hello".encodeUtf8(),
+    Date(2026,4,15),
+    Color.Green
+)
+
+assertEquals(value, Json.decode(Json.encode(value)))
+```
+
+The canonical `Json` format is intended for Lyng-to-Lyng transfer through JSON text.
+
+The plain `toJson()` projection is intended for ordinary JSON interop.
+
+Canonical `Json.encode()` should be read as the JSON analogue of `Lynon.encode()`: when Lynon already preserves a
+Lyng distinction, canonical JSON tries to preserve it too, using tags only where ordinary JSON is insufficient.
+
 ## Kotlin side interfaces
 
 The "Batteries included" principle is also applied to serialization.
 
-- `Obj.toJson()` provides Kotlin `JsonElement`
-- `Obj.toJsonString()` provides Json string representation
+- `Obj.toJson()` provides Kotlin `JsonElement` for the plain JSON projection
+- `Obj.toJsonString()` provides plain JSON string representation
 - `Obj.decodeSerializableWith()` and `Obj.decodeSerializable()` allows to decode Lyng classes as Kotlin objects using
   `kotlinx.serialization`:
 
@@ -104,10 +158,9 @@ suspend inline fun <reified T> Obj.decodeSerializable(scope: Scope = Scope()) =
     decodeSerializableWith<T>(serializer<T>(), scope)
 ```
 
-Note that lyng-2-kotlin deserialization with `kotlinx.serialization` uses JsonElement as information carrier without
-formatting and parsing actual Json strings. This is why we use `Json.decodeFromJsonElement` instead of
-`Json.decodeFromString`. Such an approach gives satisfactory performance without writing and supporting custom
-`kotlinx.serialization` codecs.
+Note that Lyng-to-Kotlin deserialization with `kotlinx.serialization` is based on the plain JSON projection,
+not the canonical `Json.encode()` format. It uses `JsonElement` as the information carrier without formatting and
+parsing actual JSON strings. This is why we use `Json.decodeFromJsonElement` instead of `Json.decodeFromString`.
 
 ### Pitfall: JSON objects and Map<String, Any?>
 
@@ -134,7 +187,8 @@ fun deserializeMapWithJsonTest() = runTest {
 
 But what if your map has objects of different types? The approach of using polymorphism is partially applicable, but what to do with `{ one: 1, two: "two" }`?
 
-The answer is pretty simple: use `JsonObject` in your deserializable object. This class is capable of holding any JSON types and structures and is sort of a silver bullet for such cases:
+The answer is simple: use `JsonObject` in your deserializable object. This class is capable of holding any JSON types
+and structures:
 
 ~~~kotlin
 @Serializable
@@ -154,26 +208,60 @@ fun deserializeAnyMapWithJsonTest() = runTest {
 ~~~
 
 
-# List of supported types
+## Supported shapes
+
+### Plain JSON projection
 
 | Lyng type | JSON type | notes       |
 |-----------|-----------|-------------|
 | `Int`     | number    |             |
-| `Real`    | number    |             |
+| `Real`    | number    | finite values only as plain numbers |
 | `String`  | string    |             |
 | `Bool`    | boolean   |             |
 | `null`    | null      |             |
 | `Instant` | string    | ISO8601 (1) |
 | `List`    | array     | (2)         |
-| `Map`     | object    | (2)         |
+| `Map`     | object    | string keys only |
+| simple class instance | object | constructor fields + mutable vars |
+| enum      | string    | entry name |
 
+### Canonical `Json.encode`
+
+This format can also round-trip:
+
+- maps with non-string keys
+- sets
+- immutable collections
+- buffers and bit buffers
+- class instances
+- singleton objects
+- enums
+- exceptions
+- `Date`, `Instant`, `DateTime`
+- non-finite reals
+- `void`
+
+It does so by adding Lyng-specific type tags only when necessary.
+
+## Kotlin-side extension point for more formats
+
+Additional formats can be exported from Kotlin modules by subclassing `ObjSerializationFormatClass` and registering the
+format in module scope with `bindSerializationFormat(...)`.
+
+```kotlin
+module.bindSerializationFormat(
+    object : ObjSerializationFormatClass("MyFormat") {
+        override suspend fun encodeValue(scope: Scope, value: Obj): Obj = ...
+        override suspend fun decodeValue(scope: Scope, encoded: Obj): Obj = ...
+    }
+)
+```
+
+This makes `MyFormat.encode(...)` and `MyFormat.decode(...)` available from Lyng after importing the module.
 
 (1)
-: ISO8601 flavor 1970-05-06T06:00:00.000Z in used; number of fractional digits depends on the truncation
-on [Instant](time.md), see `Instant.truncateTo...` functions.
+: ISO8601 flavor `1970-05-06T06:00:00.000Z` is used; number of fractional digits depends on truncation on
+`Instant`, see `Instant.truncateTo...` functions.
 
 (2)
-: List may contain any objects serializable to Json.
-
-(3)
-: Map keys must be strings, map values may be any objects serializable to Json.
+: Lists may contain any values serializable by the selected JSON layer.

@@ -60,6 +60,7 @@ internal suspend fun executeClassDecl(
 
         val newClass = ObjInstanceClass(spec.className, *parentClasses.toTypedArray())
         newClass.isAnonymous = spec.isAnonymous
+        newClass.isSingletonObject = true
         newClass.constructorMeta = ArgsDeclaration(emptyList(), Token.Type.RPAREN)
         for (i in parentClasses.indices) {
             val argsList = spec.baseSpecs[i].args

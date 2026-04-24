@@ -327,7 +327,7 @@ Singleton objects are declared using the `object` keyword. They provide a conven
 
 ```lyng
 object Config {
-    val version = "1.5.5"
+    val version = "1.5.6-SNAPSHOT"
     fun show() = println("Config version: " + version)
 }
 

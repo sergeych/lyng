@@ -32,6 +32,8 @@ import kotlinx.serialization.json.encodeToJsonElement
 import net.sergeych.lyng.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.InlineSourcesImportProvider
+import net.sergeych.lyng.serialization.ObjSerializationFormatClass
+import net.sergeych.lyng.serialization.bindSerializationFormat
 import net.sergeych.lyng.thisAs
 import net.sergeych.mp_tools.globalDefer
 import net.sergeych.tools.bm
@@ -4663,6 +4665,89 @@ class ScriptTest {
         )
     }
 
+    @Test
+    fun testUniversalJsonRoundTrip() = runTest {
+        eval(
+            """
+            import lyng.serialization
+            import lyng.time
+            
+            enum Color { Red, Green }
+            class Point(foo,bar) {
+                var z = 42
+            }
+            
+            val point = Point(1,2)
+            val color = Color.Green
+            point.z = 99
+            val value = List(
+                point,
+                Map([1, "one"], ["two", 2]),
+                Set(1,2,3),
+                "hello".encodeUtf8(),
+                Date(2026,4,15),
+                color
+            )
+            val restored = Json.decode(Json.encode(value))
+            assertEquals(value, restored)
+            assertEquals(99, restored[0].z)
+            assertEquals("one", restored[1][1])
+            assertEquals(true, restored[2].contains(3))
+            assertEquals("hello", restored[3].decodeUtf8())
+            assertEquals("2026-04-15", restored[4].toString())
+            assertEquals(Color.Green, restored[5])
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testJsonDecodePlainJsonString() = runTest {
+        val decoded = eval(
+            """
+            import lyng.serialization
+            Json.decode("{\"foo\":[1,true,\"bar\"]}")
+            """.trimIndent()
+        )
+        assertEquals("""{"foo":[1,true,"bar"]}""", decoded.toJson().toString())
+    }
+
+    @Test
+    fun testUniversalJsonExceptionRoundTrip() = runTest {
+        eval(
+            """
+            import lyng.serialization
+
+            class MyException : Exception("boom")
+
+            val ex = MyException()
+            val restored = Json.decode(Json.encode(ex))
+            assert(restored is MyException)
+            assert(restored is Exception)
+            assertEquals(ex.message, restored.message)
+            assert(restored.stackTrace.size > 0)
+        """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testUniversalJsonSingletonObjectRoundTrip() = runTest {
+        eval(
+            """
+            import lyng.serialization
+
+            object Counter {
+                var value = 1
+            }
+
+            Counter.value = 77
+            val restored = Json.decode(Json.encode(Counter))
+            assertEquals(Counter, restored)
+            assertEquals(77, Counter.value)
+            assertEquals(77, restored.value)
+        """.trimIndent()
+        )
+    }
+
     @Serializable
     data class TestJson2(
         val value: Int,
@@ -4720,6 +4805,34 @@ class ScriptTest {
         """.trimIndent()
         ).decodeSerializable<TestJson4>()
         assertEquals(TestJson4(TestEnum.One), x)
+    }
+
+    @Test
+    fun testExternalSerializationFormatRegistration() = runTest {
+        val im = Script.defaultImportManager.copy()
+        im.addPackage("test.formats") { module ->
+            module.bindSerializationFormat(
+                object : ObjSerializationFormatClass("Reverse") {
+                    override suspend fun encodeValue(scope: Scope, value: Obj): Obj =
+                        ObjString(value.toString(scope).value.reversed())
+
+                    override suspend fun decodeValue(scope: Scope, encoded: Obj): Obj {
+                        val text = (encoded as? ObjString)?.value
+                            ?: scope.raiseClassCastError("Reverse.decode expects String")
+                        return ObjString(text.reversed())
+                    }
+                },
+                doc = "Simple test format that reverses strings."
+            )
+        }
+        val scope = im.newStdScope()
+        scope.eval(
+            """
+            import test.formats
+            assertEquals("cba", Reverse.encode("abc"))
+            assertEquals("abc", Reverse.decode("cba"))
+            """.trimIndent()
+        )
     }
 
     @Test

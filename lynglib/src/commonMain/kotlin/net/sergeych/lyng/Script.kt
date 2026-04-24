@@ -27,6 +27,8 @@ import net.sergeych.lyng.bytecode.CmdVm
 import net.sergeych.lyng.bytecode.BytecodeLambdaCallable
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
+import net.sergeych.lyng.serialization.ObjJsonClass
+import net.sergeych.lyng.serialization.bindSerializationFormat
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.stdlib_included.complexLyng
 import net.sergeych.lyng.stdlib_included.decimalLyng
@@ -949,11 +951,13 @@ class Script(
                     )
                 }
                 addPackage("lyng.serialization") {
-                    it.addConstDoc(
-                        name = "Lynon",
-                        value = ObjLynonClass,
-                        doc = "Lynon serialization utilities: encode/decode data structures to a portable binary/text form.",
-                        type = type("lyng.Class")
+                    it.bindSerializationFormat(
+                        ObjLynonClass,
+                        doc = "Lynon serialization utilities: encode/decode data structures to a portable binary format."
+                    )
+                    it.bindSerializationFormat(
+                        ObjJsonClass,
+                        doc = "Universal JSON serialization utilities with bidirectional Lyng object support."
                     )
                 }
                 addPackage("lyng.time") {

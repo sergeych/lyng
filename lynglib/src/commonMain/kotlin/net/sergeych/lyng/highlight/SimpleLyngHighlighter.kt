@@ -24,6 +24,9 @@ import net.sergeych.lyng.parseLyng
 
 /** Extension that converts a [Pos] (line/column) into absolute character offset in the [Source] text. */
 fun Source.offsetOf(pos: Pos): Int {
+    if (lines.isEmpty()) return 0
+    if (pos.line < 0) return 0
+    if (pos.line >= lines.size) return text.length
     var off = 0
     // Sum full preceding lines + one '\n' per line (lines[] were created by String.lines())
     var i = 0
@@ -31,8 +34,8 @@ fun Source.offsetOf(pos: Pos): Int {
         off += lines[i].length + 1 // assume \n as separator
         i++
     }
-    off += pos.column
-    return off
+    off += pos.column.coerceIn(0, lines[pos.line].length)
+    return off.coerceAtMost(text.length)
 }
 
 private val reservedIdKeywords = setOf("constructor", "property")

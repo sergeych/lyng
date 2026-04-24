@@ -119,6 +119,7 @@ open class ObjClass(
 
     var isAbstract: Boolean = false
     var isClosed: Boolean = false
+    var isSingletonObject: Boolean = false
     var logicalPackageNameOverride: String? = null
 
     // Stable identity and simple structural version for PICs
