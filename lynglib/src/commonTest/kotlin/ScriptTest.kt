@@ -4748,6 +4748,160 @@ class ScriptTest {
         )
     }
 
+    @Test
+    fun testCanonicalJsonUsesTraditionalObjectsForStringKeyMaps() = runTest {
+        eval(
+            """
+            import lyng.serialization
+
+            val value = Map(["foo", 1], ["bar", 2])
+            val encoded = Json.encode(value)
+            assertEquals("{\"foo\":1,\"bar\":2}", encoded)
+
+            val restored = Json.decode(encoded)
+            assertEquals(value, restored)
+            assertEquals(1, restored["foo"])
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testTypedJsonRoundTripOmitsExactTypeInformation() = runTest {
+        eval(
+            """
+            import lyng.serialization
+
+            closed class Point(x: Int, y: Int)
+
+            val point = Point(0, 1)
+            val encoded = Json.encodeAs(Point, point)
+            assertEquals("{\"x\":0,\"y\":1}", encoded)
+
+            val restored = Json.decodeAs(Point, encoded)
+            assertEquals(point, restored)
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testTypedJsonUsesTraditionalObjectsForStringKeyMaps() = runTest {
+        eval(
+            """
+            import lyng.serialization
+
+            closed class Payload(values: Map<String, Int>)
+
+            val value = Payload(Map(["foo", 1], ["bar", 2]))
+            val encoded = Json.encodeAs(Payload, value)
+            assertEquals("{\"values\":{\"foo\":1,\"bar\":2}}", encoded)
+
+            val restored = Json.decodeAs(Payload, encoded)
+            assertEquals(value, restored)
+            assertEquals(2, restored.values["bar"])
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testTypedJsonRecursesUsingDeclaredFieldTypes() = runTest {
+        eval(
+            """
+            import lyng.serialization
+
+            closed class Point(x: Int, y: Int)
+            closed class Segment(a: Point, b: Point)
+
+            val value = Segment(Point(0, 1), Point(2, 3))
+            val encoded = Json.encodeAs(Segment, value)
+            assertEquals("{\"a\":{\"x\":0,\"y\":1},\"b\":{\"x\":2,\"y\":3}}", encoded)
+
+            val restored = Json.decodeAs(Segment, encoded)
+            assertEquals(value, restored)
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testTypedJsonHandlesNullableFields() = runTest {
+        eval(
+            """
+            import lyng.serialization
+
+            closed class Point(x: Int, y: Int)
+            closed class MaybePoint(point: Point?, label: String?)
+
+            val value = MaybePoint(null, "origin")
+            val encoded = Json.encodeAs(MaybePoint, value)
+            assertEquals("{\"point\":null,\"label\":\"origin\"}", encoded)
+            assertEquals(value, Json.decodeAs(MaybePoint, encoded))
+
+            val value2 = MaybePoint(Point(3, 4), null)
+            val encoded2 = Json.encodeAs(MaybePoint, value2)
+            assertEquals("{\"point\":{\"x\":3,\"y\":4},\"label\":null}", encoded2)
+            assertEquals(value2, Json.decodeAs(MaybePoint, encoded2))
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testTypedJsonKeepsSubtypeTagsWhenDeclaredTypeIsWider() = runTest {
+        eval(
+            """
+            import lyng.serialization
+
+            class Base(baseX: Int)
+            class Derived(derivedX: Int, z: Int): Base(derivedX)
+            closed class Holder(item: Base)
+
+            val value = Holder(Derived(1, 2))
+            val encoded = Json.encodeAs(Holder, value)
+
+            val restored = Json.decodeAs(Holder, encoded)
+            assert(restored.item is Derived)
+            assertEquals(2, restored.item.z)
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testTypedJsonUsesEntriesForNonStringKeyMaps() = runTest {
+        eval(
+            """
+            import lyng.serialization
+
+            closed class Numbered(values: Map<Int, String>)
+
+            val value = Numbered(Map([1, "one"], [2, "two"]))
+            val encoded = Json.encodeAs(Numbered, value)
+            assertEquals("{\"values\":[[1,\"one\"],[2,\"two\"]]}", encoded)
+
+            val restored = Json.decodeAs(Numbered, encoded)
+            assertEquals(value, restored)
+            assertEquals("one", restored.values[1])
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun testTypedJsonOmitsEnumTagsWhenEnumTypeIsKnown() = runTest {
+        eval(
+            """
+            import lyng.serialization
+
+            enum Color { Red, Green }
+            closed class Paint(color: Color)
+
+            val value = Paint(Color.Green)
+            val encoded = Json.encodeAs(Paint, value)
+            assertEquals("{\"color\":\"Green\"}", encoded)
+
+            val restored = Json.decodeAs(Paint, encoded)
+            assertEquals(value, restored)
+            assertEquals(Color.Green, restored.color)
+            """.trimIndent()
+        )
+    }
+
     @Serializable
     data class TestJson2(
         val value: Int,

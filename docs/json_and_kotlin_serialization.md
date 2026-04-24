@@ -8,15 +8,22 @@ Lyng now has two distinct JSON-facing layers:
 - canonical JSON round-trip format:
   - `Json.encode(value)`
   - `Json.decode(text)`
+- typed canonical JSON round-trip format:
+  - `Json.encodeAs(Type, value)`
+  - `Json.decodeAs(Type, text)`
 
 Use the first when you need ordinary JSON for interop.
 
-Use the second when you need Lyng value round-trip semantics through JSON text.
+Use the second when you need Lyng value round-trip semantics through JSON text with no schema.
+
+Use the third when both sides already know the Lyng type and you want the same round-trip semantics with fewer type
+tags in the JSON.
 
 This distinction is intentional:
 
 - plain JSON projection is optimized for compatibility with ordinary JSON tooling
-- canonical `Json.encode()` is optimized for semantic fidelity to Lyng and Lynon
+- canonical `Json.encode()` is optimized for semantic fidelity to Lyng and Lynon and stays self-describing
+- typed canonical `Json.encodeAs()` is optimized for the same fidelity when the schema is provided externally
 - these goals conflict for values such as sets, exceptions, singleton objects, buffers, and maps with non-string keys
 
 ## Plain JSON projection in Lyng
@@ -93,6 +100,9 @@ Please note that `toJsonString` should be used to get serialized string represen
 
 They still use JSON text, but they add Lyng-specific type tags where plain JSON would otherwise lose information.
 
+When a map already fits ordinary JSON object rules, canonical JSON keeps that traditional object shape. In particular,
+maps with string keys are still serialized as JSON objects, not as tagged entry lists.
+
 Example:
 
 ```lyng
@@ -123,6 +133,41 @@ The plain `toJson()` projection is intended for ordinary JSON interop.
 
 Canonical `Json.encode()` should be read as the JSON analogue of `Lynon.encode()`: when Lynon already preserves a
 Lyng distinction, canonical JSON tries to preserve it too, using tags only where ordinary JSON is insufficient.
+
+## Typed canonical Json round-trip format
+
+`Json.encodeAs(Type, value)` and `Json.decodeAs(Type, text)` use the same canonical rules, but with a declared target
+type available during the whole traversal.
+
+This changes one thing only: type tags may be omitted when the declared type is already exact enough to restore the
+value unambiguously.
+
+The same map rule still applies here: `Map<String, T>` stays a normal JSON object, while non-string-key maps fall back
+to canonical entry encoding.
+
+Example:
+
+```lyng
+import lyng.serialization
+
+closed class Point(x: Int, y: Int)
+closed class Segment(a: Point, b: Point)
+
+val value = Segment(Point(0, 1), Point(2, 3))
+val encoded = Json.encodeAs(Segment, value)
+
+assertEquals("{\"a\":{\"x\":0,\"y\":1},\"b\":{\"x\":2,\"y\":3}}", encoded)
+assertEquals(value, Json.decodeAs(Segment, encoded))
+```
+
+Subtype information is still preserved when the declared type is wider than the runtime one. For example, if a field is
+declared as `Base` but contains `Derived`, canonical subtype tags remain in that field.
+
+This is why the APIs are split:
+
+- `toJson()` stays plain and interop-friendly
+- `Json.encode()` stays fully self-describing and safe to decode without a schema
+- `Json.encodeAs()` uses the supplied schema to reduce noise, but only where that schema is sufficient
 
 ## Kotlin side interfaces
 
@@ -240,6 +285,17 @@ This format can also round-trip:
 - `Date`, `Instant`, `DateTime`
 - non-finite reals
 - `void`
+
+### Typed canonical `Json.encodeAs`
+
+This format round-trips the same value space as canonical `Json.encode`, but it can emit simpler JSON for:
+
+- closed classes and other exactly-known class fields
+- enums when the enum type is known
+- typed collections whose element types are known
+- nested object graphs where declared field types are precise
+
+It still falls back to canonical tagged encoding when exact runtime type information would otherwise be lost.
 
 It does so by adding Lyng-specific type tags only when necessary.
 

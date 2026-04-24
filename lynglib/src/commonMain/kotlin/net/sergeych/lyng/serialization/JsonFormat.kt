@@ -32,6 +32,7 @@ import net.sergeych.lyng.Arguments
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
+import net.sergeych.lyng.TypeDecl
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjBitBuffer
 import net.sergeych.lyng.obj.ObjBool
@@ -52,9 +53,14 @@ import net.sergeych.lyng.obj.ObjList
 import net.sergeych.lyng.obj.ObjMap
 import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.ObjReal
+import net.sergeych.lyng.obj.ObjRecord
 import net.sergeych.lyng.obj.ObjSet
 import net.sergeych.lyng.obj.ObjString
+import net.sergeych.lyng.obj.ObjTypeExpr
 import net.sergeych.lyng.obj.ObjVoid
+import net.sergeych.lyng.obj.matchesTypeDecl
+import net.sergeych.lyng.requireExactCount
+import net.sergeych.lyng.requireScope
 import net.sergeych.lynon.BitArray
 import net.sergeych.mp_tools.decodeBase64Url
 import net.sergeych.mp_tools.encodeToBase64Url
@@ -76,6 +82,24 @@ private const val STACK_TRACE_KEY = "stackTrace"
 
 object ObjJsonClass : ObjSerializationFormatClass("Json") {
 
+    init {
+        addClassFn("encodeAs") {
+            requireExactCount(2)
+            val targetType = typeDeclFromJsonTarget(requireScope(), args[0])
+            ObjString(encodeToJsonElement(requireScope(), args[1], targetType).toString())
+        }
+        addClassFn("decodeAs") {
+            requireExactCount(2)
+            val scope = requireScope()
+            val targetType = typeDeclFromJsonTarget(scope, args[0])
+            val text = when (val encoded = args[1]) {
+                is ObjString -> encoded.value
+                else -> encoded.toString(scope).value
+            }
+            decodeFromJsonElement(scope, Json.parseToJsonElement(text), targetType)
+        }
+    }
+
     override suspend fun encodeValue(scope: Scope, value: Obj): Obj =
         ObjString(encodeToJsonElement(scope, value).toString())
 
@@ -87,11 +111,11 @@ object ObjJsonClass : ObjSerializationFormatClass("Json") {
         return decodeFromJsonElement(scope, Json.parseToJsonElement(text))
     }
 
-    suspend fun encodeToJsonElement(scope: Scope, value: Obj): JsonElement =
-        UniversalJsonCodec.encode(scope, value)
+    suspend fun encodeToJsonElement(scope: Scope, value: Obj, expectedType: TypeDecl? = null): JsonElement =
+        UniversalJsonCodec.encode(scope, value, expectedType)
 
-    suspend fun decodeFromJsonElement(scope: Scope, element: JsonElement): Obj =
-        UniversalJsonCodec.decode(scope, element)
+    suspend fun decodeFromJsonElement(scope: Scope, element: JsonElement, expectedType: TypeDecl? = null): Obj =
+        UniversalJsonCodec.decode(scope, element, expectedType)
 }
 
 suspend fun Obj.toUniversalJsonElement(scope: Scope = Scope()): JsonElement =
@@ -100,8 +124,35 @@ suspend fun Obj.toUniversalJsonElement(scope: Scope = Scope()): JsonElement =
 suspend fun decodeUniversalJsonElement(element: JsonElement, scope: Scope = Scope()): Obj =
     ObjJsonClass.decodeFromJsonElement(scope, element)
 
+private fun typeDeclFromJsonTarget(scope: Scope, target: Obj): TypeDecl = when (target) {
+    is ObjTypeExpr -> target.typeDecl
+    is ObjClass -> TypeDecl.Simple(target.className, false)
+    is ObjInstance -> TypeDecl.Simple(target.objClass.className, false)
+    is ObjString -> TypeDecl.Simple(target.value, false)
+    else -> scope.raiseClassCastError("Json.encodeAs/decodeAs expects a class or type expression")
+}
+
 private object UniversalJsonCodec {
-    suspend fun encode(scope: Scope, value: Obj): JsonElement = when (value) {
+    suspend fun encode(scope: Scope, value: Obj, expectedType: TypeDecl? = null): JsonElement {
+        if (expectedType != null) {
+            encodeWithExpectedType(scope, value, expectedType)?.let { return it }
+        }
+        return encodeCanonical(scope, value)
+    }
+
+    suspend fun decode(scope: Scope, element: JsonElement, expectedType: TypeDecl? = null): Obj {
+        if (expectedType != null) {
+            if (element is JsonObject && TYPE_KEY in element) {
+                return ensureMatchesExpectedType(scope, decodeCanonical(scope, element), expectedType)
+            }
+            decodeWithExpectedType(scope, element, expectedType)?.let {
+                return ensureMatchesExpectedType(scope, it, expectedType)
+            }
+        }
+        return decodeCanonical(scope, element)
+    }
+
+    private suspend fun encodeCanonical(scope: Scope, value: Obj): JsonElement = when (value) {
         ObjVoid -> tagged("void")
         ObjNull -> JsonNull
         is ObjBool -> JsonPrimitive(value.value)
@@ -121,12 +172,12 @@ private object UniversalJsonCodec {
             BASE64_KEY to JsonPrimitive(value.bitArray.asUByteArray().asByteArray().encodeToBase64Url()),
             LAST_BYTE_BITS_KEY to JsonPrimitive(value.bitArray.lastByteBits)
         )
-        is ObjImmutableList -> tagged("immutableList", ITEMS_KEY to JsonArray(value.toMutableList().map { encode(scope, it) }))
-        is ObjList -> JsonArray(value.list.map { encode(scope, it) })
-        is ObjImmutableSet -> tagged("immutableSet", ITEMS_KEY to JsonArray(value.toMutableSet().map { encode(scope, it) }))
-        is ObjSet -> tagged("set", ITEMS_KEY to JsonArray(value.set.map { encode(scope, it) }))
+        is ObjImmutableList -> tagged("immutableList", ITEMS_KEY to JsonArray(value.toMutableList().map { encodeCanonical(scope, it) }))
+        is ObjList -> JsonArray(value.list.map { encodeCanonical(scope, it) })
+        is ObjImmutableSet -> tagged("immutableSet", ITEMS_KEY to JsonArray(value.toMutableSet().map { encodeCanonical(scope, it) }))
+        is ObjSet -> tagged("set", ITEMS_KEY to JsonArray(value.set.map { encodeCanonical(scope, it) }))
         is ObjImmutableMap -> tagged("immutableMap", ENTRIES_KEY to encodeEntries(scope, value.map.entries.map { it.toPair() }))
-        is ObjMap -> encodeMap(scope, value)
+        is ObjMap -> encodeCanonicalMap(scope, value)
         is ObjEnumEntry -> tagged(
             "enum",
             CLASS_KEY to JsonPrimitive(value.objClass.className),
@@ -135,52 +186,130 @@ private object UniversalJsonCodec {
         is ObjException -> tagged(
             "exception",
             CLASS_KEY to JsonPrimitive(value.exceptionClass.className),
-            MESSAGE_KEY to encode(scope, value.message),
-            EXTRA_DATA_KEY to encode(scope, value.extraData),
-            STACK_TRACE_KEY to encode(scope, value.getStackTrace())
+            MESSAGE_KEY to encodeCanonical(scope, value.message),
+            EXTRA_DATA_KEY to encodeCanonical(scope, value.extraData),
+            STACK_TRACE_KEY to encodeCanonical(scope, value.getStackTrace())
         )
         is ObjClass -> tagged("class", NAME_KEY to JsonPrimitive(value.className))
         is ObjInstance -> if (value.objClass.isSingletonObject) {
-            encodeSingletonObject(scope, value)
+            encodeCanonicalSingletonObject(scope, value)
         } else {
-            encodeInstance(scope, value)
+            encodeCanonicalInstance(scope, value)
         }
         else -> scope.raiseNotImplemented("Json.encode can't serialize ${value.objClass.className}")
     }
 
-    suspend fun decode(scope: Scope, element: JsonElement): Obj = when (element) {
+    private suspend fun decodeCanonical(scope: Scope, element: JsonElement): Obj = when (element) {
         JsonNull -> ObjNull
         is JsonPrimitive -> decodePrimitive(element)
-        is JsonArray -> ObjList(element.map { decode(scope, it) }.toMutableList())
-        is JsonObject -> decodeObject(scope, element)
+        is JsonArray -> ObjList(element.map { decodeCanonical(scope, it) }.toMutableList())
+        is JsonObject -> decodeCanonicalObject(scope, element)
     }
 
-    private suspend fun encodeMap(scope: Scope, value: ObjMap): JsonElement {
+    private suspend fun encodeWithExpectedType(scope: Scope, value: Obj, expectedType: TypeDecl): JsonElement? {
+        if (value === ObjNull) return JsonNull
+
+        when (value) {
+            is ObjBool -> return JsonPrimitive(value.value)
+            is ObjInt -> return JsonPrimitive(value.value)
+            is ObjReal -> if (value.value.isFinite()) return JsonPrimitive(value.value)
+            is ObjString -> return JsonPrimitive(value.value)
+            is ObjDate -> if (isExpectedExactClass(scope, expectedType, value.objClass)) return JsonPrimitive(value.date.toString())
+            is ObjInstant -> if (isExpectedExactClass(scope, expectedType, value.objClass)) return JsonPrimitive(value.instant.toString())
+            is ObjDateTime -> if (isExpectedExactClass(scope, expectedType, value.objClass)) return JsonPrimitive(value.toRFC3339())
+            is ObjBuffer -> if (isExpectedExactClass(scope, expectedType, value.objClass)) return JsonPrimitive(value.base64)
+            is ObjBitBuffer -> if (isExpectedExactClass(scope, expectedType, value.objClass)) {
+                return JsonObject(
+                    linkedMapOf(
+                        BASE64_KEY to JsonPrimitive(value.bitArray.asUByteArray().asByteArray().encodeToBase64Url()),
+                        LAST_BYTE_BITS_KEY to JsonPrimitive(value.bitArray.lastByteBits)
+                    )
+                )
+            }
+            is ObjEnumEntry -> if (isExpectedExactClass(scope, expectedType, value.objClass)) {
+                return JsonPrimitive(value.name.value)
+            }
+            is ObjList -> if (expectedBaseName(expectedType) == "List") {
+                return JsonArray(value.list.map { encode(scope, it, expectedElementType(expectedType)) })
+            }
+            is ObjImmutableList -> if (expectedBaseName(expectedType) == "ImmutableList") {
+                return JsonArray(value.toMutableList().map { encode(scope, it, expectedElementType(expectedType)) })
+            }
+            is ObjSet -> if (expectedBaseName(expectedType) == "Set") {
+                return JsonArray(value.set.map { encode(scope, it, expectedElementType(expectedType)) })
+            }
+            is ObjImmutableSet -> if (expectedBaseName(expectedType) == "ImmutableSet") {
+                return JsonArray(value.toMutableSet().map { encode(scope, it, expectedElementType(expectedType)) })
+            }
+            is ObjMap -> if (expectedBaseName(expectedType) == "Map") {
+                return encodeTypedMap(scope, value.map, expectedKeyType(expectedType), expectedValueType(expectedType))
+            }
+            is ObjImmutableMap -> if (expectedBaseName(expectedType) == "ImmutableMap") {
+                return encodeTypedMap(scope, value.map, expectedKeyType(expectedType), expectedValueType(expectedType))
+            }
+            is ObjInstance -> if (isExpectedExactClass(scope, expectedType, value.objClass)) {
+                return if (value.objClass.isSingletonObject) encodeTypedSingletonObject(scope, value) else encodeTypedInstance(scope, value)
+            }
+            else -> Unit
+        }
+
+        return null
+    }
+
+    private suspend fun decodeWithExpectedType(scope: Scope, element: JsonElement, expectedType: TypeDecl): Obj? = when (element) {
+        JsonNull -> ObjNull
+        is JsonPrimitive -> decodePrimitiveWithExpectedType(scope, element, expectedType)
+        is JsonArray -> decodeArrayWithExpectedType(scope, element, expectedType)
+        is JsonObject -> decodeObjectWithExpectedType(scope, element, expectedType)
+    }
+
+    private suspend fun encodeCanonicalMap(scope: Scope, value: ObjMap): JsonElement {
         if (value.map.keys.all { it is ObjString } && TYPE_KEY !in value.map.keys.map { (it as ObjString).value }) {
             return JsonObject(
                 value.map.entries.associate { (k, v) ->
-                    (k as ObjString).value to encode(scope, v)
+                    (k as ObjString).value to encodeCanonical(scope, v)
                 }
             )
         }
         return tagged("map", ENTRIES_KEY to encodeEntries(scope, value.map.entries.map { it.toPair() }))
     }
 
-    private suspend fun encodeEntries(scope: Scope, entries: List<Pair<Obj, Obj>>): JsonArray =
-        JsonArray(entries.map { (k, v) -> JsonArray(listOf(encode(scope, k), encode(scope, v))) })
+    private suspend fun encodeTypedMap(
+        scope: Scope,
+        map: Map<Obj, Obj>,
+        keyType: TypeDecl?,
+        valueType: TypeDecl?
+    ): JsonElement {
+        val stringKeys = keyType != null && expectedBaseName(keyType) == "String"
+        if (stringKeys && map.keys.all { it is ObjString } && TYPE_KEY !in map.keys.map { (it as ObjString).value }) {
+            return JsonObject(
+                map.entries.associate { (k, v) ->
+                    (k as ObjString).value to encode(scope, v, valueType)
+                }
+            )
+        }
+        return JsonArray(
+            map.entries.map { (k, v) ->
+                JsonArray(listOf(encode(scope, k, keyType), encode(scope, v, valueType)))
+            }
+        )
+    }
 
-    private suspend fun encodeInstance(scope: Scope, value: ObjInstance): JsonElement {
+    private suspend fun encodeEntries(scope: Scope, entries: List<Pair<Obj, Obj>>): JsonArray =
+        JsonArray(entries.map { (k, v) -> JsonArray(listOf(encodeCanonical(scope, k), encodeCanonical(scope, v))) })
+
+    private suspend fun encodeCanonicalInstance(scope: Scope, value: ObjInstance): JsonElement {
         val meta = value.objClass.constructorMeta
             ?: scope.raiseError("can't serialize non-serializable object (no constructor meta)")
         val args = linkedMapOf<String, JsonElement>()
         for (param in meta.params) {
             if (!param.isTransient) {
-                args[param.name] = encode(scope, value.readField(scope, param.name).value)
+                args[param.name] = encodeCanonical(scope, value.readField(scope, param.name).value)
             }
         }
         val vars = linkedMapOf<String, JsonElement>()
         for ((key, record) in value.serializingVars) {
-            vars[key.substringAfterLast("::")] = encode(scope, record.value)
+            vars[key.substringAfterLast("::")] = encodeCanonical(scope, record.value)
         }
         return tagged(
             "instance",
@@ -190,10 +319,25 @@ private object UniversalJsonCodec {
         )
     }
 
-    private suspend fun encodeSingletonObject(scope: Scope, value: ObjInstance): JsonElement {
+    private suspend fun encodeTypedInstance(scope: Scope, value: ObjInstance): JsonObject {
+        val meta = value.objClass.constructorMeta
+            ?: scope.raiseError("can't serialize non-serializable object (no constructor meta)")
+        val fields = linkedMapOf<String, JsonElement>()
+        for (param in meta.params) {
+            if (!param.isTransient) {
+                fields[param.name] = encode(scope, value.readField(scope, param.name).value, param.type)
+            }
+        }
+        for ((key, record) in value.serializingVars) {
+            fields[key.substringAfterLast("::")] = encode(scope, record.value, record.typeDecl)
+        }
+        return JsonObject(fields)
+    }
+
+    private suspend fun encodeCanonicalSingletonObject(scope: Scope, value: ObjInstance): JsonElement {
         val vars = linkedMapOf<String, JsonElement>()
         for ((key, record) in value.serializingVars) {
-            vars[key.substringAfterLast("::")] = encode(scope, record.value)
+            vars[key.substringAfterLast("::")] = encodeCanonical(scope, record.value)
         }
         return tagged(
             "object",
@@ -202,12 +346,20 @@ private object UniversalJsonCodec {
         )
     }
 
-    private suspend fun decodeObject(scope: Scope, element: JsonObject): Obj {
+    private suspend fun encodeTypedSingletonObject(scope: Scope, value: ObjInstance): JsonObject {
+        val vars = linkedMapOf<String, JsonElement>()
+        for ((key, record) in value.serializingVars) {
+            vars[key.substringAfterLast("::")] = encode(scope, record.value, record.typeDecl)
+        }
+        return JsonObject(vars)
+    }
+
+    private suspend fun decodeCanonicalObject(scope: Scope, element: JsonObject): Obj {
         val tag = element[TYPE_KEY]?.jsonPrimitive?.content
         if (tag == null) {
             val map = linkedMapOf<Obj, Obj>()
             for ((k, v) in element) {
-                map[ObjString(k)] = decode(scope, v)
+                map[ObjString(k)] = decodeCanonical(scope, v)
             }
             return ObjMap(map.toMutableMap())
         }
@@ -224,16 +376,16 @@ private object UniversalJsonCodec {
                     requiredInt(element, LAST_BYTE_BITS_KEY)
                 )
             )
-            "immutableList" -> ObjImmutableList(requiredArray(element, ITEMS_KEY).map { decode(scope, it) })
-            "set" -> ObjSet(requiredArray(element, ITEMS_KEY).map { decode(scope, it) }.toMutableSet())
-            "immutableSet" -> ObjImmutableSet(requiredArray(element, ITEMS_KEY).map { decode(scope, it) })
-            "map" -> decodeMap(scope, requiredArray(element, ENTRIES_KEY), mutable = true)
-            "immutableMap" -> decodeMap(scope, requiredArray(element, ENTRIES_KEY), mutable = false)
+            "immutableList" -> ObjImmutableList(requiredArray(element, ITEMS_KEY).map { decodeCanonical(scope, it) })
+            "set" -> ObjSet(requiredArray(element, ITEMS_KEY).map { decodeCanonical(scope, it) }.toMutableSet())
+            "immutableSet" -> ObjImmutableSet(requiredArray(element, ITEMS_KEY).map { decodeCanonical(scope, it) })
+            "map" -> decodeCanonicalMap(scope, requiredArray(element, ENTRIES_KEY), mutable = true)
+            "immutableMap" -> decodeCanonicalMap(scope, requiredArray(element, ENTRIES_KEY), mutable = false)
             "class" -> resolveClass(scope, requiredString(element, NAME_KEY))
-            "enum" -> decodeEnum(scope, element)
-            "instance" -> decodeInstance(scope, element)
-            "object" -> decodeSingletonObject(scope, element)
-            "exception" -> decodeException(scope, element)
+            "enum" -> decodeCanonicalEnum(scope, element)
+            "instance" -> decodeCanonicalInstance(scope, element)
+            "object" -> decodeCanonicalSingletonObject(scope, element)
+            "exception" -> decodeCanonicalException(scope, element)
             else -> scope.raiseIllegalArgument("unknown Json type tag '$tag'")
         }
     }
@@ -249,6 +401,38 @@ private object UniversalJsonCodec {
         }
     }
 
+    private suspend fun decodePrimitiveWithExpectedType(scope: Scope, element: JsonPrimitive, expectedType: TypeDecl): Obj? {
+        val expectedClass = expectedExactClass(scope, expectedType)
+        val baseName = expectedBaseName(expectedType)
+        return when {
+            expectedClass is ObjEnumClass && element.isString ->
+                expectedClass.invokeInstanceMethod(scope, "valueOf", ObjString(element.content))
+            baseName == "Bool" -> element.booleanOrNull?.let { ObjBool(it) }
+            baseName == "Int" -> if (!element.isString) element.longOrNull?.let { ObjInt.of(it) } else null
+            baseName == "Real" -> decodeExpectedReal(element)
+            baseName == "String" -> if (element.isString) ObjString(element.content) else null
+            baseName == "Date" && element.isString -> ObjDate(LocalDate.parse(element.content))
+            baseName == "Instant" && element.isString -> ObjInstant(Instant.parse(element.content))
+            baseName == "DateTime" && element.isString ->
+                ObjDateTime.type.invokeInstanceMethod(scope, "parseRFC3339", ObjString(element.content))
+            baseName == "Buffer" && element.isString -> ObjBuffer(element.content.decodeBase64Url().asUByteArray())
+            else -> decodePrimitive(element)
+        }
+    }
+
+    private fun decodeExpectedReal(element: JsonPrimitive): ObjReal? {
+        if (element.isString) {
+            return when (element.content) {
+                "NaN" -> ObjReal(Double.NaN)
+                "Infinity" -> ObjReal(Double.POSITIVE_INFINITY)
+                "-Infinity" -> ObjReal(Double.NEGATIVE_INFINITY)
+                else -> null
+            }
+        }
+        val raw = element.content
+        return ObjReal((element.doubleOrNull ?: raw.toDouble()))
+    }
+
     private fun decodeTaggedReal(element: JsonObject): ObjReal {
         val raw = requiredString(element, VALUE_KEY)
         val value = when (raw) {
@@ -260,26 +444,124 @@ private object UniversalJsonCodec {
         return ObjReal(value)
     }
 
-    private suspend fun decodeMap(scope: Scope, entries: JsonArray, mutable: Boolean): Obj {
+    private suspend fun decodeArrayWithExpectedType(scope: Scope, element: JsonArray, expectedType: TypeDecl): Obj? {
+        val itemType = expectedElementType(expectedType)
+        return when (expectedBaseName(expectedType)) {
+            "List" -> ObjList(element.map { decode(scope, it, itemType) }.toMutableList())
+            "ImmutableList" -> ObjImmutableList(element.map { decode(scope, it, itemType) })
+            "Set" -> ObjSet(element.map { decode(scope, it, itemType) }.toMutableSet())
+            "ImmutableSet" -> ObjImmutableSet(element.map { decode(scope, it, itemType) })
+            "Map" -> decodeTypedMap(scope, element, mutable = true, keyType = expectedKeyType(expectedType), valueType = expectedValueType(expectedType))
+            "ImmutableMap" -> decodeTypedMap(scope, element, mutable = false, keyType = expectedKeyType(expectedType), valueType = expectedValueType(expectedType))
+            else -> null
+        }
+    }
+
+    private suspend fun decodeObjectWithExpectedType(scope: Scope, element: JsonObject, expectedType: TypeDecl): Obj? {
+        return when (expectedBaseName(expectedType)) {
+            "Map" -> decodeTypedMapObject(scope, element, mutable = true, valueType = expectedValueType(expectedType))
+            "ImmutableMap" -> decodeTypedMapObject(scope, element, mutable = false, valueType = expectedValueType(expectedType))
+            "BitBuffer" -> {
+                val base64 = element[BASE64_KEY]?.jsonPrimitive?.content ?: return null
+                val bits = element[LAST_BYTE_BITS_KEY]?.jsonPrimitive?.content?.toInt() ?: return null
+                ObjBitBuffer(BitArray(base64.decodeBase64Url().asUByteArray(), bits))
+            }
+            else -> {
+                val klass = expectedExactClass(scope, expectedType) ?: return null
+                when {
+                    klass.isSingletonObject -> decodeTypedSingletonObject(scope, klass, element)
+                    klass is ObjEnumClass -> null
+                    else -> decodeTypedInstance(scope, klass, element)
+                }
+            }
+        }
+    }
+
+    private suspend fun decodeCanonicalMap(scope: Scope, entries: JsonArray, mutable: Boolean): Obj {
         val pairs = entries.map { item ->
             val pair = item as? JsonArray ?: scope.raiseIllegalArgument("map entry must be a JSON array")
             if (pair.size != 2) scope.raiseIllegalArgument("map entry must contain exactly 2 items")
-            decode(scope, pair[0]) to decode(scope, pair[1])
+            decodeCanonical(scope, pair[0]) to decodeCanonical(scope, pair[1])
         }
         return if (mutable) ObjMap(pairs.toMap().toMutableMap()) else ObjImmutableMap(pairs.toMap())
     }
 
-    private suspend fun decodeEnum(scope: Scope, element: JsonObject): Obj {
+    private suspend fun decodeTypedMap(
+        scope: Scope,
+        entries: JsonArray,
+        mutable: Boolean,
+        keyType: TypeDecl?,
+        valueType: TypeDecl?
+    ): Obj {
+        val pairs = entries.map { item ->
+            val pair = item as? JsonArray ?: scope.raiseIllegalArgument("map entry must be a JSON array")
+            if (pair.size != 2) scope.raiseIllegalArgument("map entry must contain exactly 2 items")
+            decode(scope, pair[0], keyType) to decode(scope, pair[1], valueType)
+        }
+        return if (mutable) ObjMap(pairs.toMap().toMutableMap()) else ObjImmutableMap(pairs.toMap())
+    }
+
+    private suspend fun decodeTypedMapObject(
+        scope: Scope,
+        element: JsonObject,
+        mutable: Boolean,
+        valueType: TypeDecl?
+    ): Obj {
+        val map = linkedMapOf<Obj, Obj>()
+        for ((k, v) in element) {
+            map[ObjString(k)] = decode(scope, v, valueType)
+        }
+        return if (mutable) ObjMap(map.toMutableMap()) else ObjImmutableMap(map)
+    }
+
+    private suspend fun decodeCanonicalEnum(scope: Scope, element: JsonObject): Obj {
         val klass = resolveClass(scope, requiredString(element, CLASS_KEY))
         if (klass !is ObjEnumClass) scope.raiseClassCastError("${klass.className} is not an enum")
         return klass.invokeInstanceMethod(scope, "valueOf", ObjString(requiredString(element, NAME_KEY)))
     }
 
-    private suspend fun decodeInstance(scope: Scope, element: JsonObject): Obj {
+    private suspend fun decodeCanonicalInstance(scope: Scope, element: JsonObject): Obj {
         val klass = resolveClass(scope, requiredString(element, CLASS_KEY))
+        return decodeCanonicalInstanceWithClass(scope, klass, requiredObject(element, ARGS_KEY), requiredObject(element, VARS_KEY))
+    }
+
+    private suspend fun decodeTypedInstance(scope: Scope, klass: ObjClass, element: JsonObject): Obj {
         val meta = klass.constructorMeta
             ?: scope.raiseError("can't deserialize ${klass.className} from Json: no constructor meta")
-        val argsObject = requiredObject(element, ARGS_KEY)
+        val namedArgs = linkedMapOf<String, Obj>()
+        for (param in meta.params) {
+            if (param.isTransient) continue
+            val encoded = element[param.name]
+            if (encoded == null) {
+                if (param.defaultValue == null && !param.type.isNullable) {
+                    scope.raiseIllegalArgument("missing constructor field '${param.name}' for ${klass.className}")
+                }
+            } else {
+                namedArgs[param.name] = decode(scope, encoded, param.type)
+            }
+        }
+        val callScope = scope.createChildScope(args = Arguments(list = emptyList(), named = namedArgs))
+        val instance = klass.callOn(callScope)
+        if (instance is ObjInstance) {
+            val ctorNames = meta.params.map { it.name }.toSet()
+            for ((name, encoded) in element) {
+                if (name in ctorNames) continue
+                val target = resolveSerializableVar(instance, name)
+                    ?: scope.raiseIllegalArgument("unknown serializable field '${klass.className}.$name'")
+                target.value = decode(scope, encoded, target.typeDecl)
+            }
+        }
+        return instance
+    }
+
+    private suspend fun decodeCanonicalInstanceWithClass(
+        scope: Scope,
+        klass: ObjClass,
+        argsObject: JsonObject,
+        varsObject: JsonObject
+    ): Obj {
+        val meta = klass.constructorMeta
+            ?: scope.raiseError("can't deserialize ${klass.className} from Json: no constructor meta")
         val namedArgs = linkedMapOf<String, Obj>()
         for (param in meta.params) {
             if (param.isTransient) continue
@@ -289,47 +571,63 @@ private object UniversalJsonCodec {
                     scope.raiseIllegalArgument("missing constructor field '${param.name}' for ${klass.className}")
                 }
             } else {
-                namedArgs[param.name] = decode(scope, encoded)
+                namedArgs[param.name] = decodeCanonical(scope, encoded)
             }
         }
         val callScope = scope.createChildScope(args = Arguments(list = emptyList(), named = namedArgs))
         val instance = klass.callOn(callScope)
         if (instance is ObjInstance) {
-            val varsObject = requiredObject(element, VARS_KEY)
             for ((name, encoded) in varsObject) {
                 val target = resolveSerializableVar(instance, name)
                     ?: scope.raiseIllegalArgument("unknown serializable field '${klass.className}.$name'")
-                target.value = decode(scope, encoded)
+                target.value = decodeCanonical(scope, encoded)
             }
         }
         return instance
     }
 
-    private suspend fun decodeSingletonObject(scope: Scope, element: JsonObject): Obj {
+    private suspend fun decodeCanonicalSingletonObject(scope: Scope, element: JsonObject): Obj {
         val instance = resolveObject(scope, requiredString(element, NAME_KEY))
         val varsObject = requiredObject(element, VARS_KEY)
         for ((name, encoded) in varsObject) {
             val target = resolveSerializableVar(instance, name)
                 ?: scope.raiseIllegalArgument("unknown serializable field '${instance.objClass.className}.$name'")
-            target.value = decode(scope, encoded)
+            target.value = decodeCanonical(scope, encoded)
         }
         return instance
     }
 
-    private suspend fun decodeException(scope: Scope, element: JsonObject): Obj {
+    private suspend fun decodeTypedSingletonObject(scope: Scope, klass: ObjClass, element: JsonObject): Obj {
+        val instance = resolveObject(scope, klass.className)
+        for ((name, encoded) in element) {
+            val target = resolveSerializableVar(instance, name)
+                ?: scope.raiseIllegalArgument("unknown serializable field '${instance.objClass.className}.$name'")
+            target.value = decode(scope, encoded, target.typeDecl)
+        }
+        return instance
+    }
+
+    private suspend fun decodeCanonicalException(scope: Scope, element: JsonObject): Obj {
         val klass = resolveClass(scope, requiredString(element, CLASS_KEY))
         if (klass !is ObjException.Companion.ExceptionClass) {
             scope.raiseClassCastError("${klass.className} is not an exception class")
         }
-        val message = decode(scope, requireElement(element, MESSAGE_KEY)) as? ObjString
+        val message = decodeCanonical(scope, requireElement(element, MESSAGE_KEY)) as? ObjString
             ?: scope.raiseClassCastError("exception message must be a string")
-        val extraData = decode(scope, requireElement(element, EXTRA_DATA_KEY))
-        val stackTrace = decode(scope, requireElement(element, STACK_TRACE_KEY)) as? ObjList
+        val extraData = decodeCanonical(scope, requireElement(element, EXTRA_DATA_KEY))
+        val stackTrace = decodeCanonical(scope, requireElement(element, STACK_TRACE_KEY)) as? ObjList
             ?: scope.raiseClassCastError("exception stackTrace must be a list")
         return ObjException(klass, scope, message, extraData, stackTrace)
     }
 
-    private fun resolveSerializableVar(instance: ObjInstance, name: String) =
+    private suspend fun ensureMatchesExpectedType(scope: Scope, value: Obj, expectedType: TypeDecl): Obj {
+        if (!matchesTypeDecl(scope, value, expectedType)) {
+            scope.raiseClassCastError("decoded Json value of type ${value.objClass.className} does not match expected type ${typeName(expectedType)}")
+        }
+        return value
+    }
+
+    private fun resolveSerializableVar(instance: ObjInstance, name: String): ObjRecord? =
         instance.serializingVars[name]
             ?: instance.serializingVars.entries.singleOrNull { it.key.substringAfterLast("::") == name }?.value
 
@@ -358,6 +656,68 @@ private object UniversalJsonCodec {
             scope.raiseClassCastError("Expected object $objectName, got ${resolved.objClass.className}")
         }
         scope.raiseSymbolNotFound(objectName)
+    }
+
+    private suspend fun expectedExactClass(scope: Scope, expectedType: TypeDecl): ObjClass? {
+        val nonNullable = nonNullableType(expectedType)
+        val className = when (nonNullable) {
+            is TypeDecl.Simple -> nonNullable.name
+            is TypeDecl.Generic -> nonNullable.name
+            else -> return null
+        }
+        return resolveClass(scope, className)
+    }
+
+    private suspend fun isExpectedExactClass(scope: Scope, expectedType: TypeDecl, actualClass: ObjClass): Boolean =
+        expectedExactClass(scope, expectedType) == actualClass
+
+    private fun expectedBaseName(expectedType: TypeDecl?): String? {
+        val nonNullable = expectedType?.let { nonNullableType(it) } ?: return null
+        return when (nonNullable) {
+            is TypeDecl.Simple -> nonNullable.name.substringAfterLast('.')
+            is TypeDecl.Generic -> nonNullable.name.substringAfterLast('.')
+            else -> null
+        }
+    }
+
+    private fun expectedTypeArgs(expectedType: TypeDecl?): List<TypeDecl> = when (val nonNullable = expectedType?.let { nonNullableType(it) }) {
+        is TypeDecl.Generic -> nonNullable.args
+        else -> emptyList()
+    }
+
+    private fun expectedElementType(expectedType: TypeDecl?): TypeDecl? = expectedTypeArgs(expectedType).getOrNull(0)
+
+    private fun expectedKeyType(expectedType: TypeDecl?): TypeDecl? = expectedTypeArgs(expectedType).getOrNull(0)
+
+    private fun expectedValueType(expectedType: TypeDecl?): TypeDecl? = expectedTypeArgs(expectedType).getOrNull(1)
+
+    private fun nonNullableType(type: TypeDecl): TypeDecl = when (type) {
+        is TypeDecl.Function -> type.copy(nullable = false)
+        is TypeDecl.Ellipsis -> type.copy(nullable = false)
+        is TypeDecl.TypeVar -> type.copy(nullable = false)
+        is TypeDecl.Union -> type.copy(nullable = false)
+        is TypeDecl.Intersection -> type.copy(nullable = false)
+        is TypeDecl.Simple -> TypeDecl.Simple(type.name, false)
+        is TypeDecl.Generic -> TypeDecl.Generic(type.name, type.args, false)
+        else -> type
+    }
+
+    private fun typeName(type: TypeDecl): String = when (type) {
+        TypeDecl.TypeAny -> "Any"
+        TypeDecl.TypeNullableAny -> "Any?"
+        is TypeDecl.Simple -> type.name + if (type.isNullable) "?" else ""
+        is TypeDecl.Generic -> buildString {
+            append(type.name)
+            append('<')
+            append(type.args.joinToString(",") { typeName(it) })
+            append('>')
+            if (type.isNullable) append('?')
+        }
+        is TypeDecl.Function -> "Callable"
+        is TypeDecl.Ellipsis -> typeName(type.elementType) + "..."
+        is TypeDecl.TypeVar -> type.name + if (type.isNullable) "?" else ""
+        is TypeDecl.Union -> type.options.joinToString(" | ") { typeName(it) }
+        is TypeDecl.Intersection -> type.options.joinToString(" & ") { typeName(it) }
     }
 
     private fun tagged(type: String, vararg fields: Pair<String, JsonElement>): JsonObject =

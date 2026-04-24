@@ -24,6 +24,13 @@ For the built-in formats:
 - `Json.encode(x)` returns `String`
 - `Json.decode(jsonString)` returns the original Lyng value
 
+`Json` also provides a typed canonical mode:
+
+- `Json.encodeAs(Type, value)` returns `String`
+- `Json.decodeAs(Type, jsonString)` returns the original Lyng value of the specified type
+
+This is still canonical JSON, but it is schema-driven instead of fully self-describing.
+
 ## Lynon
 
 Lynon is LYng Object Notation. It is typed, binary, bit-effective, implements caching, automatic compression,
@@ -91,9 +98,10 @@ There are two JSON-related APIs and they serve different purposes:
 
 - `Json.encode()` / `Json.decode()`
   - produce JSON text too
-  - but use Lyng-specific type tags where needed
+  - use Lyng-specific type tags so the payload is self-describing
   - intended for round-tripping Lyng values
   - intended to match Lynon semantics where JSON can carry them
+  - still keep ordinary string-key maps in traditional JSON object form
   - can preserve values that plain JSON cannot represent directly, such as:
     - maps with non-string keys
     - sets
@@ -106,12 +114,23 @@ There are two JSON-related APIs and they serve different purposes:
     - non-finite reals
     - `void`
 
+- `Json.encodeAs(Type, value)` / `Json.decodeAs(Type, text)`
+  - also round-trip Lyng values through JSON text
+  - use the declared or requested type as decoding schema
+  - recursively omit type tags when the declared type is already exact enough
+  - keep canonical tags when the runtime value is more specific than the declared type
+  - produce less noisy JSON for closed and otherwise precisely-typed object graphs
+  - still keep ordinary `Map<String, ...>` values in traditional JSON object form
+
 Why this split exists:
 
 - plain `toJson()` must remain ordinary JSON so it stays convenient for external JSON systems and Kotlin
   `kotlinx.serialization`
-- canonical `Json.encode()` is for Lyng-to-Lyng transport through JSON text, so it must preserve Lyng runtime
+- canonical `Json.encode()` is for Lyng-to-Lyng transport through JSON text without any external schema, so it must
+  remain self-describing and preserve Lyng runtime
   distinctions whenever possible
+- `Json.encodeAs()` exists for the cases where a schema is known on both sides and we want canonical round-trip
+  behavior with fewer tags
 - one API cannot optimize for both goals at once: either you get too many Lyng tags for ordinary JSON interop, or you
   get lossy round-trips
 
@@ -135,6 +154,20 @@ Example:
     )
 
     assertEquals(x, Json.decode(Json.encode(x)))
+    >>> void
+
+Typed canonical example:
+
+    import lyng.serialization
+
+    closed class Point(x: Int, y: Int)
+    closed class Segment(a: Point, b: Point)
+
+    val value = Segment(Point(0,1), Point(2,3))
+    val json = Json.encodeAs(Segment, value)
+
+    assertEquals("{\"a\":{\"x\":0,\"y\":1},\"b\":{\"x\":2,\"y\":3}}", json)
+    assertEquals(value, Json.decodeAs(Segment, json))
     >>> void
 
 ## Adding more formats from Kotlin modules
