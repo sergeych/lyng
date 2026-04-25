@@ -2014,6 +2014,7 @@ class Compiler(
 
     private var lastAnnotation: (suspend (Scope, ObjString, Statement) -> Statement)? = null
     private var isTransientFlag: Boolean = false
+    private val pendingDeclAnnotations: MutableList<ParsedDeclAnnotation> = mutableListOf()
     private var lastLabel: String? = null
     private val strictSlotRefs: Boolean = settings.strictSlotRefs
     private val allowUnresolvedRefs: Boolean = settings.allowUnresolvedRefs
@@ -2689,6 +2690,7 @@ class Compiler(
         lastAnnotation = null
         lastLabel = null
         isTransientFlag = false
+        pendingDeclAnnotations.clear()
         while (true) {
             val t = cc.next()
             return when (t.type) {
@@ -2706,15 +2708,17 @@ class Compiler(
                 }
 
                 Token.Type.ATLABEL -> {
-                    val label = t.value
-                    if (label == "Transient") {
+                    val parsedAnnotation = parseDeclAnnotation(t)
+                    if (parsedAnnotation.name == "Transient") {
                         isTransientFlag = true
-                        continue
                     }
                     if (cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
-                        lastLabel = label
+                        lastLabel = parsedAnnotation.name
                     }
-                    lastAnnotation = parseAnnotation(t)
+                    pendingDeclAnnotations += parsedAnnotation
+                    if (parsedAnnotation.name != "Transient") {
+                        lastAnnotation = parsedAnnotation.toStatementAnnotation()
+                    }
                     continue
                 }
 
@@ -4033,11 +4037,17 @@ class Compiler(
 
                 Token.Type.ID, Token.Type.ATLABEL -> {
                     var isTransient = false
-                    if (t.type == Token.Type.ATLABEL) {
-                        if (t.value == "Transient") {
+                    val annotationSpecs = mutableListOf<ParsedDeclAnnotation>()
+                    while (t.type == Token.Type.ATLABEL) {
+                        val spec = parseDeclAnnotation(t)
+                        annotationSpecs += spec
+                        if (spec.name == "Transient") {
                             isTransient = true
-                            t = cc.next()
-                        } else throw ScriptError(t.pos, "Unexpected label in argument list")
+                        }
+                        t = cc.next()
+                    }
+                    if (annotationSpecs.isNotEmpty() && !isClassDeclaration) {
+                        throw ScriptError(t.pos, "parameter annotations are currently supported only on class constructor parameters")
                     }
 
                     // visibility
@@ -4114,7 +4124,8 @@ class Compiler(
                         defaultValue,
                         effectiveAccess,
                         visibility,
-                        isTransient
+                        isTransient,
+                        annotationSpecs = annotationSpecs
                     )
 
                     // important: valid argument list continues with ',' and ends with '->' or ')'
@@ -7120,19 +7131,25 @@ class Compiler(
         return parseNumberOrNull(isPlus) ?: throw ScriptError(cc.currentPos(), "Expecting number")
     }
 
-    suspend fun parseAnnotation(t: Token): (suspend (Scope, ObjString, Statement) -> Statement) {
+    private suspend fun parseDeclAnnotation(t: Token): ParsedDeclAnnotation {
         val extraArgs = parseArgsOrNull()
         resolutionSink?.reference(t.value, t.pos)
-//        println("annotation ${t.value}: args: $extraArgs")
-        return { scope, name, body ->
-            val extras = extraArgs?.first?.toArguments(scope, extraArgs.second)?.list
-            val required = listOf(name, body)
-            val args = extras?.let { required + it } ?: required
-            val fn = scope.get(t.value)?.value ?: scope.raiseSymbolNotFound("annotation not found: ${t.value}")
-            if (fn !is Statement) scope.raiseIllegalArgument("annotation must be callable, got ${fn.objClass}")
-            (fn.execute(scope.createChildScope(Arguments(args))) as? Statement)
-                ?: scope.raiseClassCastError("function annotation must return callable")
-        }
+        val compiledArgs = extraArgs?.first?.map { arg ->
+            val value = arg.value
+            arg.copy(
+                value = if (value is Statement) wrapBytecode(value) else value
+            )
+        } ?: emptyList()
+        return ParsedDeclAnnotation(
+            name = t.value,
+            args = compiledArgs,
+            tailBlockMode = extraArgs?.second ?: false,
+            pos = t.pos
+        )
+    }
+
+    suspend fun parseAnnotation(t: Token): (suspend (Scope, ObjString, Statement) -> Statement) {
+        return parseDeclAnnotation(t).toStatementAnnotation()
     }
 
     suspend fun parseArgsOrNull(): Pair<List<ParsedArgument>, Boolean>? =
@@ -9232,6 +9249,8 @@ class Compiler(
         isTransient: Boolean = isTransientFlag
     ): Statement {
         isTransientFlag = false
+        val declarationAnnotationSpecs = pendingDeclAnnotations.toList()
+        pendingDeclAnnotations.clear()
         val actualExtern = isExtern || (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.isExtern == true
         var start = cc.currentPos()
         var extTypeName: String? = null
@@ -9700,6 +9719,7 @@ class Compiler(
                     isClosed = isClosed,
                     isOverride = isOverride,
                     isTransient = isTransient,
+                    annotations = emptyList(),
                     accessTypeLabel = "Callable",
                     initializer = initExpr,
                     pos = start
@@ -10251,6 +10271,8 @@ class Compiler(
         isTransient: Boolean = isTransientFlag
     ): Statement {
         isTransientFlag = false
+        val declarationAnnotationSpecs = pendingDeclAnnotations.toList()
+        pendingDeclAnnotations.clear()
         val actualExtern = isExtern || (codeContexts.lastOrNull() as? CodeContext.ClassBody)?.isExtern == true
         val markStart = cc.savePos()
         val nextToken = cc.next()
@@ -10643,6 +10665,9 @@ class Compiler(
             !isStatic &&
             !isProperty
         ) {
+            if (declarationAnnotationSpecs.isNotEmpty()) {
+                throw ScriptError(start, "declaration annotations are currently supported only on class members")
+            }
             if (isDelegate) {
                 val initExpr = initialExpression ?: throw ScriptError(start, "Delegate must be initialized")
                 val slotPlan = slotPlanStack.lastOrNull()
@@ -10663,6 +10688,9 @@ class Compiler(
         }
 
         if (isStatic) {
+            if (extTypeName != null && declarationAnnotationSpecs.isNotEmpty()) {
+                throw ScriptError(start, "declaration annotations are not supported on extension properties")
+            }
             if (declaringClassNameCaptured != null) {
                 val directRef = unwrapDirectRef(initialExpression)
                 val declClass = resolveTypeDeclObjClass(varTypeDecl)
@@ -10685,6 +10713,7 @@ class Compiler(
                 initializer = initialExpression,
                 isDelegated = isDelegate,
                 isTransient = isTransient,
+                annotationSpecs = declarationAnnotationSpecs,
                 startPos = start
             )
             return NopStatement
@@ -10847,6 +10876,9 @@ class Compiler(
         }
 
         if (extTypeName != null) {
+            if (declarationAnnotationSpecs.isNotEmpty()) {
+                throw ScriptError(start, "declaration annotations are not supported on extension properties")
+            }
             declareLocalName(extensionPropertyGetterName(extTypeName, name), isMutable = false)
             if (setter != null) {
                 declareLocalName(extensionPropertySetterName(extTypeName, name), isMutable = false)
@@ -10883,6 +10915,7 @@ class Compiler(
                         isClosed = isClosed,
                         isOverride = isOverride,
                         isTransient = isTransient,
+                        annotations = emptyList(),
                         accessTypeLabel = accessType,
                         initializer = initExpr,
                         pos = start
@@ -10898,6 +10931,7 @@ class Compiler(
                     isClosed = isClosed,
                     isOverride = isOverride,
                     isTransient = isTransient,
+                    annotationSpecs = declarationAnnotationSpecs,
                     methodId = memberMethodId,
                     initStatement = initStmt,
                     pos = start
@@ -10919,6 +10953,7 @@ class Compiler(
                         isClosed = isClosed,
                         isOverride = isOverride,
                         isTransient = isTransient,
+                        annotations = emptyList(),
                         prop = prop,
                         pos = start
                     )
@@ -10933,6 +10968,7 @@ class Compiler(
                     isClosed = isClosed,
                     isOverride = isOverride,
                     isTransient = isTransient,
+                    annotationSpecs = declarationAnnotationSpecs,
                     prop = prop,
                     methodId = memberMethodId,
                     initStatement = initStmt,
@@ -10950,6 +10986,7 @@ class Compiler(
                     isClosed = isClosed,
                     isOverride = isOverride,
                     isTransient = isTransient,
+                    annotations = emptyList(),
                     isLateInitVal = isLateInitVal,
                     initializer = initialExpression,
                     pos = start
@@ -10966,6 +11003,7 @@ class Compiler(
                 isClosed = isClosed,
                 isOverride = isOverride,
                 isTransient = isTransient,
+                annotationSpecs = declarationAnnotationSpecs,
                 fieldId = memberFieldId,
                 initStatement = initStmt,
                 pos = start

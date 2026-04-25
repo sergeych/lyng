@@ -2805,6 +2805,7 @@ class CmdDeclClassField(internal val constId: Int, internal val slot: Int) : Cmd
         val decl = frame.fn.constants[constId] as? BytecodeConst.ClassFieldDecl
             ?: error("DECL_CLASS_FIELD expects ClassFieldDecl at $constId")
         val scope = frame.ensureScope()
+        val annotations = decl.annotationSpecs.evaluateDeclAnnotations(scope)
         val cls = scope.thisObj as? ObjClass
             ?: scope.raiseIllegalState("class field init requires class scope")
         val value = frame.slotToObj(slot).byValueCopy()
@@ -2815,7 +2816,8 @@ class CmdDeclClassField(internal val constId: Int, internal val slot: Int) : Cmd
             decl.visibility,
             decl.writeVisibility,
             Pos.builtIn,
-            isTransient = decl.isTransient
+            isTransient = decl.isTransient,
+            annotations = annotations
         )
         scope.addItem(
             decl.name,
@@ -2824,7 +2826,8 @@ class CmdDeclClassField(internal val constId: Int, internal val slot: Int) : Cmd
             decl.visibility,
             decl.writeVisibility,
             recordType = ObjRecord.Type.Field,
-            isTransient = decl.isTransient
+            isTransient = decl.isTransient,
+            annotations = annotations
         )
         return
     }
@@ -2835,6 +2838,7 @@ class CmdDeclClassDelegated(internal val constId: Int, internal val slot: Int) :
         val decl = frame.fn.constants[constId] as? BytecodeConst.ClassDelegatedDecl
             ?: error("DECL_CLASS_DELEGATED expects ClassDelegatedDecl at $constId")
         val scope = frame.ensureScope()
+        val annotations = decl.annotationSpecs.evaluateDeclAnnotations(scope)
         val cls = scope.thisObj as? ObjClass
             ?: scope.raiseIllegalState("class delegated init requires class scope")
         val initValue = frame.slotToObj(slot)
@@ -2857,7 +2861,8 @@ class CmdDeclClassDelegated(internal val constId: Int, internal val slot: Int) :
             decl.writeVisibility,
             Pos.builtIn,
             isTransient = decl.isTransient,
-            type = ObjRecord.Type.Delegated
+            type = ObjRecord.Type.Delegated,
+            annotations = annotations
         ).apply {
             delegate = finalDelegate
         }
@@ -2868,7 +2873,8 @@ class CmdDeclClassDelegated(internal val constId: Int, internal val slot: Int) :
             decl.visibility,
             decl.writeVisibility,
             recordType = ObjRecord.Type.Delegated,
-            isTransient = decl.isTransient
+            isTransient = decl.isTransient,
+            annotations = annotations
         ).apply {
             delegate = finalDelegate
         }
@@ -2895,6 +2901,7 @@ class CmdDeclClassInstanceField(internal val constId: Int, internal val slot: In
         val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstanceFieldDecl
             ?: error("DECL_CLASS_INSTANCE_FIELD expects ClassInstanceFieldDecl at $constId")
         val scope = frame.ensureScope()
+        val annotations = decl.annotationSpecs.evaluateDeclAnnotations(scope)
         val cls = scope.thisObj as? ObjClass
             ?: scope.raiseIllegalState("class instance field requires class scope")
         cls.createField(
@@ -2911,7 +2918,8 @@ class CmdDeclClassInstanceField(internal val constId: Int, internal val slot: In
             isTransient = decl.isTransient,
             typeDecl = decl.typeDecl,
             type = ObjRecord.Type.Field,
-            fieldId = decl.fieldId
+            fieldId = decl.fieldId,
+            annotations = annotations
         )
         if (!decl.isAbstract) {
             decl.initStatement?.let { cls.instanceInitializers += it }
@@ -2926,6 +2934,7 @@ class CmdDeclClassInstanceProperty(internal val constId: Int, internal val slot:
         val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstancePropertyDecl
             ?: error("DECL_CLASS_INSTANCE_PROPERTY expects ClassInstancePropertyDecl at $constId")
         val scope = frame.ensureScope()
+        val annotations = decl.annotationSpecs.evaluateDeclAnnotations(scope)
         val cls = scope.thisObj as? ObjClass
             ?: scope.raiseIllegalState("class instance property requires class scope")
         cls.addProperty(
@@ -2938,7 +2947,8 @@ class CmdDeclClassInstanceProperty(internal val constId: Int, internal val slot:
             isOverride = decl.isOverride,
             pos = decl.pos,
             prop = decl.prop,
-            methodId = decl.methodId
+            methodId = decl.methodId,
+            annotations = annotations
         )
         if (!decl.isAbstract) {
             decl.initStatement?.let { cls.instanceInitializers += it }
@@ -2953,6 +2963,7 @@ class CmdDeclClassInstanceDelegated(internal val constId: Int, internal val slot
         val decl = frame.fn.constants[constId] as? BytecodeConst.ClassInstanceDelegatedDecl
             ?: error("DECL_CLASS_INSTANCE_DELEGATED expects ClassInstanceDelegatedDecl at $constId")
         val scope = frame.ensureScope()
+        val annotations = decl.annotationSpecs.evaluateDeclAnnotations(scope)
         val cls = scope.thisObj as? ObjClass
             ?: scope.raiseIllegalState("class instance delegated requires class scope")
         cls.createField(
@@ -2968,7 +2979,8 @@ class CmdDeclClassInstanceDelegated(internal val constId: Int, internal val slot
             isOverride = decl.isOverride,
             isTransient = decl.isTransient,
             type = ObjRecord.Type.Delegated,
-            methodId = decl.methodId
+            methodId = decl.methodId,
+            annotations = annotations
         )
         if (!decl.isAbstract) {
             decl.initStatement?.let { cls.instanceInitializers += it }
@@ -2994,7 +3006,8 @@ class CmdDeclInstanceField(internal val constId: Int, internal val slot: Int) : 
             isAbstract = decl.isAbstract,
             isClosed = decl.isClosed,
             isOverride = decl.isOverride,
-            isTransient = decl.isTransient
+            isTransient = decl.isTransient,
+            annotations = decl.annotations
         )
         if (slot >= frame.fn.scopeSlotCount) {
             val localIndex = slot - frame.fn.scopeSlotCount
@@ -3023,7 +3036,8 @@ class CmdDeclInstanceProperty(internal val constId: Int, internal val slot: Int)
             isAbstract = decl.isAbstract,
             isClosed = decl.isClosed,
             isOverride = decl.isOverride,
-            isTransient = decl.isTransient
+            isTransient = decl.isTransient,
+            annotations = decl.annotations
         )
         if (slot >= frame.fn.scopeSlotCount) {
             val localIndex = slot - frame.fn.scopeSlotCount
@@ -3076,7 +3090,8 @@ class CmdDeclInstanceDelegated(internal val constId: Int, internal val slot: Int
             isAbstract = decl.isAbstract,
             isClosed = decl.isClosed,
             isOverride = decl.isOverride,
-            isTransient = decl.isTransient
+            isTransient = decl.isTransient,
+            annotations = decl.annotations
         ).apply {
             delegate = finalDelegate
         }
@@ -3705,9 +3720,26 @@ class CmdGetClassScope(
             decl = declared
             break
         }
-        val resolved = rec ?: scope.raiseSymbolNotFound(name)
-        val declClass = decl ?: cls
-        val resolvedRec = cls.resolveRecord(scope, resolved, name, declClass)
+        val resolvedRec = if (rec != null) {
+            val declClass = decl ?: cls
+            cls.resolveRecord(scope, rec, name, declClass)
+        } else {
+            val metaRec = cls.objClass.getInstanceMemberOrNull(name)
+            if (metaRec == null || metaRec.isAbstract) {
+                scope.raiseSymbolNotFound(name)
+            }
+            val declClass = metaRec.declaringClass ?: cls.objClass
+            val resolved = cls.resolveRecord(scope, metaRec, name, declClass)
+            if (resolved.type == ObjRecord.Type.Fun) {
+                resolved.copy(
+                    value = ObjExternCallable.fromBridge {
+                        resolved.value.invoke(scope, cls, args, declClass)
+                    }
+                )
+            } else {
+                resolved
+            }
+        }
         val value = resolvedRec.value
         frame.storeObjResult(dst, value)
         return

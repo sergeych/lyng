@@ -20,6 +20,32 @@ extern class SqlColumn {
     val nativeType: String
 }
 
+/*
+    Adapter interface for custom DB field projection.
+
+    Use it with `@DbDecodeWith(adapter)` on class constructor parameters or
+    class-body fields/properties participating in `decodeAs<T>()` projection.
+
+    `targetType` is the requested Lyng target type represented as a runtime
+    type object, such as a class or a type expression.
+
+    Default methods throw `NotImplementedException`.
+*/
+interface DbFieldAdapter {
+    /*
+        Decode one raw database field value into a Lyng value suitable for the
+        requested target type.
+    */
+    fun decode(rawValue: Object?, column: SqlColumn, row: SqlRow, targetType: Object): Object? =
+        throw NotImplementedException("DB field adapter decode is not implemented")
+
+    /*
+        Encode one Lyng value into a database field representation.
+    */
+    fun encode(value: Object?, targetType: Object): Object? =
+        throw NotImplementedException("DB field adapter encode is not implemented")
+}
+
 extern class SqlRow {
     /* Number of columns in the row */
     val size: Int
@@ -34,6 +60,22 @@ extern class SqlRow {
         names and invalid indexes should also fail.
     */
     override fun getAt(indexOrName: String | Int): Object?
+
+    /*
+        Decode this row into a typed Lyng value.
+
+        For object/class targets, constructor parameters are matched by column
+        label first and then remaining matching serializable mutable fields are
+        assigned.
+
+        If a constructor parameter or class-body field/property has
+        `@DbDecodeWith(adapter)`, the adapter is applied first and its result
+        must match the target member type.
+
+        For single-column rows, the column value may also be decoded directly to
+        the requested target type.
+    */
+    fun decodeAs<T>(): T
 }
 
 /*
@@ -69,6 +111,16 @@ extern class ResultSet : Iterable<SqlRow> {
         internally, but this must not change visible later iteration behavior.
     */
     override fun isEmpty(): Bool
+
+    /*
+        Return a transaction-scoped iterable view that decodes each row with
+        `SqlRow.decodeAs<T>()`.
+
+        The returned iterable itself must not be used after the owning
+        transaction ends. Materialized decoded objects may outlive the
+        transaction.
+    */
+    fun decodeAs<T>(): Iterable<T>
 }
 
 extern class ExecutionResult {

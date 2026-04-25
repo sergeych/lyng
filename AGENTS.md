@@ -13,6 +13,7 @@
 - Prefer defining Lyng entities (enums/classes/type shapes) in `.lyng` files; only define them in Kotlin when there is Kotlin/platform-specific implementation detail that cannot be expressed in Lyng.
 - Avoid hardcoding Lyng API documentation in Kotlin registrars when it can be declared in `.lyng`; Kotlin-side docs should be fallback/bridge only.
 - For mixed pluggable modules (Lyng + Kotlin), embed module `.lyng` sources as generated Kotlin string literals, evaluate them into module scope during registration, then attach Kotlin implementations/bindings.
+- When a change adds or changes Lyng-visible runtime/module behavior, update the corresponding `.lyng` declaration in the same change, including declaration-level docs/comments for new API surface.
 
 ## Kotlin/Wasm generation guardrails
 - Avoid creating suspend lambdas for compiler runtime statements. Prefer explicit `object : Statement()` with `override suspend fun execute(...)`.

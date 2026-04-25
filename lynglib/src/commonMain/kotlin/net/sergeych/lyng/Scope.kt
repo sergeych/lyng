@@ -718,6 +718,7 @@ open class Scope(
         isTransient: Boolean = false,
         callSignature: CallSignature? = null,
         typeDecl: TypeDecl? = null,
+        annotations: List<DeclAnnotation> = emptyList(),
         fieldId: Int? = null,
         methodId: Int? = null
     ): ObjRecord {
@@ -731,6 +732,7 @@ open class Scope(
             isTransient = isTransient,
             callSignature = callSignature,
             typeDecl = typeDecl,
+            annotations = annotations,
             memberName = name,
             fieldId = fieldId,
             methodId = methodId

@@ -88,7 +88,8 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                         a.visibility ?: defaultVisibility,
                         recordType = recordType,
                         declaringClass = declaringClass,
-                        isTransient = a.isTransient
+                        isTransient = a.isTransient,
+                        annotations = a.annotations
                     )
                 }
                 return
@@ -108,7 +109,8 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
                 a.visibility ?: defaultVisibility,
                 recordType = recordType,
                 declaringClass = declaringClass,
-                isTransient = a.isTransient
+                isTransient = a.isTransient,
+                annotations = a.annotations
             )
         }
 
@@ -505,5 +507,7 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         val accessType: AccessType? = null,
         val visibility: Visibility? = null,
         val isTransient: Boolean = false,
+        val annotationSpecs: List<ParsedDeclAnnotation> = emptyList(),
+        val annotations: List<DeclAnnotation> = emptyList(),
     )
 }

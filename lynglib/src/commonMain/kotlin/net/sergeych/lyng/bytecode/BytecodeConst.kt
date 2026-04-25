@@ -18,6 +18,7 @@
 package net.sergeych.lyng.bytecode
 
 import net.sergeych.lyng.ArgsDeclaration
+import net.sergeych.lyng.ParsedDeclAnnotation
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.TypeDecl
 import net.sergeych.lyng.Visibility
@@ -85,6 +86,7 @@ sealed class BytecodeConst {
         val visibility: Visibility,
         val writeVisibility: Visibility?,
         val isTransient: Boolean,
+        val annotationSpecs: List<ParsedDeclAnnotation>,
     ) : BytecodeConst()
     data class ClassDelegatedDecl(
         val name: String,
@@ -92,6 +94,7 @@ sealed class BytecodeConst {
         val visibility: Visibility,
         val writeVisibility: Visibility?,
         val isTransient: Boolean,
+        val annotationSpecs: List<ParsedDeclAnnotation>,
     ) : BytecodeConst()
     data class ClassInstanceInitDecl(
         val initStatement: Obj,
@@ -103,6 +106,7 @@ sealed class BytecodeConst {
         val writeVisibility: Visibility?,
         val typeDecl: TypeDecl?,
         val isTransient: Boolean,
+        val annotationSpecs: List<ParsedDeclAnnotation>,
         val isAbstract: Boolean,
         val isClosed: Boolean,
         val isOverride: Boolean,
@@ -116,6 +120,7 @@ sealed class BytecodeConst {
         val visibility: Visibility,
         val writeVisibility: Visibility?,
         val isTransient: Boolean,
+        val annotationSpecs: List<ParsedDeclAnnotation>,
         val isAbstract: Boolean,
         val isClosed: Boolean,
         val isOverride: Boolean,
@@ -130,6 +135,7 @@ sealed class BytecodeConst {
         val visibility: Visibility,
         val writeVisibility: Visibility?,
         val isTransient: Boolean,
+        val annotationSpecs: List<ParsedDeclAnnotation>,
         val isAbstract: Boolean,
         val isClosed: Boolean,
         val isOverride: Boolean,
@@ -143,6 +149,7 @@ sealed class BytecodeConst {
         val visibility: Visibility,
         val writeVisibility: Visibility?,
         val isTransient: Boolean,
+        val annotations: List<net.sergeych.lyng.DeclAnnotation>,
         val isAbstract: Boolean,
         val isClosed: Boolean,
         val isOverride: Boolean,
@@ -153,6 +160,7 @@ sealed class BytecodeConst {
         val visibility: Visibility,
         val writeVisibility: Visibility?,
         val isTransient: Boolean,
+        val annotations: List<net.sergeych.lyng.DeclAnnotation>,
         val isAbstract: Boolean,
         val isClosed: Boolean,
         val isOverride: Boolean,
@@ -164,6 +172,7 @@ sealed class BytecodeConst {
         val visibility: Visibility,
         val writeVisibility: Visibility?,
         val isTransient: Boolean,
+        val annotations: List<net.sergeych.lyng.DeclAnnotation>,
         val isAbstract: Boolean,
         val isClosed: Boolean,
         val isOverride: Boolean,

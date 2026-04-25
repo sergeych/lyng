@@ -6360,7 +6360,8 @@ class BytecodeCompiler(
                     isMutable = stmt.isMutable,
                     visibility = stmt.visibility,
                     writeVisibility = stmt.writeVisibility,
-                    isTransient = stmt.isTransient
+                    isTransient = stmt.isTransient,
+                    annotationSpecs = stmt.annotationSpecs
                 )
             )
         } else {
@@ -6370,7 +6371,8 @@ class BytecodeCompiler(
                     isMutable = stmt.isMutable,
                     visibility = stmt.visibility,
                     writeVisibility = stmt.writeVisibility,
-                    isTransient = stmt.isTransient
+                    isTransient = stmt.isTransient,
+                    annotationSpecs = stmt.annotationSpecs
                 )
             )
         }
@@ -6397,6 +6399,7 @@ class BytecodeCompiler(
                 writeVisibility = stmt.writeVisibility,
                 typeDecl = stmt.typeDecl,
                 isTransient = stmt.isTransient,
+                annotationSpecs = stmt.annotationSpecs,
                 isAbstract = stmt.isAbstract,
                 isClosed = stmt.isClosed,
                 isOverride = stmt.isOverride,
@@ -6419,6 +6422,7 @@ class BytecodeCompiler(
                 visibility = stmt.visibility,
                 writeVisibility = stmt.writeVisibility,
                 isTransient = stmt.isTransient,
+                annotationSpecs = stmt.annotationSpecs,
                 isAbstract = stmt.isAbstract,
                 isClosed = stmt.isClosed,
                 isOverride = stmt.isOverride,
@@ -6442,6 +6446,7 @@ class BytecodeCompiler(
                 visibility = stmt.visibility,
                 writeVisibility = stmt.writeVisibility,
                 isTransient = stmt.isTransient,
+                annotationSpecs = stmt.annotationSpecs,
                 isAbstract = stmt.isAbstract,
                 isClosed = stmt.isClosed,
                 isOverride = stmt.isOverride,
@@ -6475,6 +6480,7 @@ class BytecodeCompiler(
                 visibility = stmt.visibility,
                 writeVisibility = stmt.writeVisibility,
                 isTransient = stmt.isTransient,
+                annotations = stmt.annotations,
                 isAbstract = stmt.isAbstract,
                 isClosed = stmt.isClosed,
                 isOverride = stmt.isOverride
@@ -6497,6 +6503,7 @@ class BytecodeCompiler(
                 visibility = stmt.visibility,
                 writeVisibility = stmt.writeVisibility,
                 isTransient = stmt.isTransient,
+                annotations = stmt.annotations,
                 isAbstract = stmt.isAbstract,
                 isClosed = stmt.isClosed,
                 isOverride = stmt.isOverride
@@ -6517,6 +6524,7 @@ class BytecodeCompiler(
                 visibility = stmt.visibility,
                 writeVisibility = stmt.writeVisibility,
                 isTransient = stmt.isTransient,
+                annotations = stmt.annotations,
                 isAbstract = stmt.isAbstract,
                 isClosed = stmt.isClosed,
                 isOverride = stmt.isOverride,

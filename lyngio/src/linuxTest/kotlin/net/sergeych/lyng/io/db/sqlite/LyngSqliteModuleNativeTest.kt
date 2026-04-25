@@ -19,11 +19,13 @@ package net.sergeych.lyng.io.db.sqlite
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
+import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Script
+import net.sergeych.lyng.Source
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjBool
 import net.sergeych.lyng.obj.ObjBuffer
@@ -229,6 +231,230 @@ class LyngSqliteModuleNativeTest {
 
         assertEquals("alpha", stringValue(scope, rows.getAt(scope, ObjInt.Zero).getAt(scope, ObjString("name"))))
         assertEquals("beta", stringValue(scope, rows.getAt(scope, ObjInt.of(1)).getAt(scope, ObjString("name"))))
+    }
+
+    @Test
+    fun testDecodeAsProjectsJsonColumnIntoObjectField() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db.sqlite
+
+            class Point(x: Int, y: Int)
+            class Row(id: Int, payload: Point)
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table data(id integer not null, payload json not null)")
+                tx.execute("insert into data(id, payload) values(?, ?)", 7, "{\"x\":4,\"y\":5}")
+                val row = tx.select("select id, payload from data").decodeAs<Row>().first
+                assertEquals(7, row.id)
+                assertEquals(4, row.payload.x)
+                assertEquals(5, row.payload.y)
+                row.payload.y
+            }
+        """.trimIndent()
+
+        val result = Compiler.compile(Source("<sqlite-native-decode-json-field>", code), scope.importManager).execute(scope) as ObjInt
+        assertEquals(5L, result.value)
+    }
+
+    @Test
+    fun testDecodeAsSupportsSingleJsonColumnProjection() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db.sqlite
+
+            class Point(x: Int, y: Int)
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table data(payload json not null)")
+                tx.execute("insert into data(payload) values(?)", "{\"x\":9,\"y\":11}")
+                val point = tx.select("select payload from data").decodeAs<Point>().first
+                assertEquals(9, point.x)
+                assertEquals(11, point.y)
+                point.x + point.y
+            }
+        """.trimIndent()
+
+        val result = Compiler.compile(Source("<sqlite-native-decode-json-single>", code), scope.importManager).execute(scope) as ObjInt
+        assertEquals(20L, result.value)
+    }
+
+    @Test
+    fun testDecodeAsDoesNotAutoDecodePlainTextAsJson() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db.sqlite
+
+            class Point(x: Int, y: Int)
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table data(payload text not null)")
+                tx.execute("insert into data(payload) values(?)", "{\"x\":1,\"y\":2}")
+                tx.select("select payload from data").decodeAs<Point>().first
+            }
+        """.trimIndent()
+
+        val error = assertFailsWith<ExecutionError> {
+            Compiler.compile(Source("<sqlite-native-decode-json-text-guard>", code), scope.importManager).execute(scope)
+        }
+        assertEquals("SqlUsageException", error.errorObject.objClass.className)
+    }
+
+    @Test
+    fun testDecodeAsSupportsSingleLynonBinaryProjection() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db.sqlite
+            import lyng.serialization
+
+            class Point(x: Int, y: Int)
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table data(payload blob not null)")
+                tx.execute("insert into data(payload) values(?)", Lynon.encode(Point(6, 8)).toBuffer())
+                val point = tx.select("select payload from data").decodeAs<Point>().first
+                assertEquals(6, point.x)
+                assertEquals(8, point.y)
+                point.x + point.y
+            }
+        """.trimIndent()
+
+        val result = Compiler.compile(Source("<sqlite-native-decode-lynon-single>", code), scope.importManager).execute(scope) as ObjInt
+        assertEquals(14L, result.value)
+    }
+
+    @Test
+    fun testDecodeAsSupportsDbDecodeWithOnConstructorParamsAndFields() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db
+            import lyng.io.db.sqlite
+
+            object TrimmedStringAdapter: DbFieldAdapter {
+                override fun decode(rawValue, column, row, targetType) =
+                    when(rawValue) {
+                        null -> null
+                        else -> rawValue.toString().trim()
+                    }
+            }
+
+            class User(
+                id: Int,
+                @DbDecodeWith(TrimmedStringAdapter) name: String
+            ) {
+                @DbDecodeWith(TrimmedStringAdapter)
+                var note: String = ""
+            }
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table data(id integer not null, name text not null, note text not null)")
+                tx.execute("insert into data(id, name, note) values(?, ?, ?)", 10, "  Alice  ", "  hello  ")
+                val user = tx.select("select id, name, note from data").decodeAs<User>().first
+                assertEquals(10, user.id)
+                assertEquals("Alice", user.name)
+                assertEquals("hello", user.note)
+                user.note.size
+            }
+        """.trimIndent()
+
+        val result = Compiler.compile(Source("<sqlite-native-decode-dbdecodewith>", code), scope.importManager).execute(scope) as ObjInt
+        assertEquals(5L, result.value)
+    }
+
+    @Test
+    fun testDecodeAsFailsWhenDbDecodeWithReturnsWrongType() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db
+            import lyng.io.db.sqlite
+
+            object BadAdapter: DbFieldAdapter {
+                override fun decode(rawValue, column, row, targetType) = 42
+            }
+
+            class User(@DbDecodeWith(BadAdapter) name: String)
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table data(name text not null)")
+                tx.execute("insert into data(name) values(?)", "Alice")
+                tx.select("select name from data").decodeAs<User>().first
+            }
+        """.trimIndent()
+
+        val error = assertFailsWith<ExecutionError> {
+            Compiler.compile(Source("<sqlite-native-decode-dbdecodewith-bad-type>", code), scope.importManager).execute(scope)
+        }
+        assertEquals("SqlUsageException", error.errorObject.objClass.className)
+    }
+
+    @Test
+    fun testDecodeAsKeepsRawBufferForBufferTarget() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db.sqlite
+            import lyng.buffer
+            import lyng.serialization
+
+            class Point(x: Int, y: Int)
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table data(payload blob not null)")
+                val encoded = Lynon.encode(Point(1, 2)).toBuffer()
+                tx.execute("insert into data(payload) values(?)", encoded)
+                val payload = tx.select("select payload from data").decodeAs<Buffer>().first
+                assertEquals(encoded.size, payload.size)
+                payload.size
+            }
+        """.trimIndent()
+
+        val result = Compiler.compile(Source("<sqlite-native-decode-buffer-raw>", code), scope.importManager).execute(scope) as ObjInt
+        assertTrue(result.value > 0)
+    }
+
+    @Test
+    fun testDecodeAsFailsForNonLynonBinaryTypedProjection() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db.sqlite
+            import lyng.buffer
+
+            class Point(x: Int, y: Int)
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table data(payload blob not null)")
+                tx.execute("insert into data(payload) values(?)", "hello".encodeUtf8())
+                tx.select("select payload from data").decodeAs<Point>().first
+            }
+        """.trimIndent()
+
+        val error = assertFailsWith<ExecutionError> {
+            Compiler.compile(Source("<sqlite-native-decode-lynon-binary-guard>", code), scope.importManager).execute(scope)
+        }
+        assertEquals("SqlUsageException", error.errorObject.objClass.className)
     }
 
     @Test

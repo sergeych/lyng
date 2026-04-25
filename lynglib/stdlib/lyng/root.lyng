@@ -14,6 +14,24 @@ extern class NotImplementedException
 /* Raised when an awaited asynchronous task was cancelled before producing a value. */
 extern class CancellationException : Exception
 
+/* Runtime metaobject describing a class. */
+extern class Class {
+    /* Full name of this class including package if available. */
+    val className: String
+    /* Simple name of this class (without package). */
+    val name: String
+    /* Declared instance fields of this class and its ancestors (C3 order), without duplicates. */
+    val fields: List<String>
+    /* Declared instance methods of this class and its ancestors (C3 order), without duplicates. */
+    val methods: List<String>
+    /* Lookup a member by name in this class (including ancestors) and return it, or null if absent. */
+    fun get(name: String): Object?
+    /* Preserved annotations for a constructor parameter as descriptor maps with keys `name`, `positional`, and `named`. */
+    fun getConstructorAnnotations(name: String): ImmutableList<Map<String, Object>>
+    /* Preserved annotations for a member as descriptor maps with keys `name`, `positional`, and `named`. */
+    fun getMemberAnnotations(name: String): ImmutableList<Map<String, Object>>
+}
+
 /* A handle to a running asynchronous task. */
 extern class Deferred {
     /* Cancel the task if it is still active. Safe to call multiple times. */

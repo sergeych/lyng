@@ -207,13 +207,26 @@ assertThrows(RollbackException) {
 - `isEmpty()` — fast emptiness check where possible.
 - `iterator()` — normal row iteration while the transaction is active.
 - `toList()` — materialize detached `SqlRow` snapshots that may be used after the transaction ends.
+- `decodeAs<T>()` — transaction-scoped iterable view that decodes each row into `T`.
 
 ##### `SqlRow`
 
 - `row[index]` — zero-based positional access.
 - `row["columnName"]` — case-insensitive lookup by output column label.
+- `row.decodeAs<T>()` — decode one row into a typed Lyng value.
 
 Name-based access fails with `SqlUsageException` if the name is missing or ambiguous.
+
+##### `DbFieldAdapter`
+
+Custom DB field projection hook used by `@DbDecodeWith(...)`.
+
+- `decode(rawValue, column, row, targetType)` — adapt one raw DB field value to a Lyng value for the requested target type.
+- `encode(value, targetType)` — future symmetric hook for SQL parameter encoding.
+
+Use `@DbDecodeWith(adapter)` on class constructor parameters and class-body fields/properties that participate in `decodeAs<T>()`.
+
+Annotation arguments are evaluated once when the declaration is created, and the resulting adapter instance is retained in declaration metadata.
 
 ##### `ExecutionResult`
 
@@ -248,6 +261,22 @@ Portable result metadata categories:
 - `Date`
 - `DateTime`
 - `Instant`
+
+Typed row decode rules:
+
+- object/class targets map constructor parameters by column label, case-insensitively
+- remaining matching serializable mutable fields are assigned after constructor call
+- `@DbDecodeWith(adapter)` on a constructor parameter or class-body field/property takes precedence over built-in JSON/Lynon decoding
+- `@DbDecodeWith(adapter)` must receive exactly one adapter instance implementing `DbFieldAdapter`
+- adapter output must match the target member type or decoding fails with `SqlUsageException`
+- missing required non-null constructor fields fail
+- defaulted or nullable constructor fields may be omitted from the result
+- extra result columns currently fail in strict mode
+- if a row has exactly one column, that value may be decoded directly as the requested target type
+- JSON-like native column types (`json`, `jsonb`) are decoded through typed canonical `Json` when the target type is not `String`
+- binary columns are decoded through `Lynon` when the target type is not `Buffer`
+- `Buffer` targets keep the raw binary payload without Lynon decoding
+- plain text columns are not implicitly treated as JSON
 
 For temporal types, see [time functions](time.md).
 
@@ -387,6 +416,8 @@ This means:
 
 - do not keep `ResultSet` objects after the transaction block returns
 - materialize rows with `toList()` inside the transaction when they must outlive it
+- the iterable returned by `decodeAs<T>()` is also transaction-scoped
+- decoded objects produced while iterating `decodeAs<T>()` are detached ordinary Lyng values
 
 The same rule applies to generated keys from `ExecutionResult.getGeneratedKeys()`: the `ResultSet` is transaction-scoped, but rows returned by `toList()` are detached.
 

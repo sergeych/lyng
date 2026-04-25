@@ -16,6 +16,7 @@
  */
 
 package net.sergeych.lyng.obj
+import net.sergeych.lyng.DeclAnnotation
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.Visibility
 
@@ -40,6 +41,7 @@ data class ObjRecord(
     var receiver: Obj? = null,
     val callSignature: net.sergeych.lyng.CallSignature? = null,
     val typeDecl: net.sergeych.lyng.TypeDecl? = null,
+    val annotations: List<DeclAnnotation> = emptyList(),
     val memberName: String? = null,
     val fieldId: Int? = null,
     val methodId: Int? = null,

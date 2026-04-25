@@ -365,6 +365,7 @@ class BytecodeStatement private constructor(
                         stmt.initializer?.let { unwrapDeep(it) },
                         stmt.isDelegated,
                         stmt.isTransient,
+                        stmt.annotationSpecs,
                         stmt.pos
                     )
                 }
@@ -385,6 +386,7 @@ class BytecodeStatement private constructor(
                         stmt.isClosed,
                         stmt.isOverride,
                         stmt.isTransient,
+                        stmt.annotationSpecs,
                         stmt.fieldId,
                         stmt.initStatement?.let { unwrapDeep(it) },
                         stmt.pos
@@ -400,6 +402,7 @@ class BytecodeStatement private constructor(
                         stmt.isClosed,
                         stmt.isOverride,
                         stmt.isTransient,
+                        stmt.annotationSpecs,
                         stmt.prop,
                         stmt.methodId,
                         stmt.initStatement?.let { unwrapDeep(it) },
@@ -416,6 +419,7 @@ class BytecodeStatement private constructor(
                         stmt.isClosed,
                         stmt.isOverride,
                         stmt.isTransient,
+                        stmt.annotationSpecs,
                         stmt.methodId,
                         stmt.initStatement?.let { unwrapDeep(it) },
                         stmt.pos
@@ -431,6 +435,7 @@ class BytecodeStatement private constructor(
                         stmt.isClosed,
                         stmt.isOverride,
                         stmt.isTransient,
+                        stmt.annotations,
                         stmt.isLateInitVal,
                         stmt.initializer?.let { unwrapDeep(it) },
                         stmt.pos
@@ -446,6 +451,7 @@ class BytecodeStatement private constructor(
                         stmt.isClosed,
                         stmt.isOverride,
                         stmt.isTransient,
+                        stmt.annotations,
                         stmt.prop,
                         stmt.pos
                     )
@@ -461,6 +467,7 @@ class BytecodeStatement private constructor(
                         stmt.isClosed,
                         stmt.isOverride,
                         stmt.isTransient,
+                        stmt.annotations,
                         stmt.accessTypeLabel,
                         unwrapDeep(stmt.initializer),
                         stmt.pos

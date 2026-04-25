@@ -28,6 +28,23 @@ import net.sergeych.lynon.LynonType
 // Simple id generator for class identities (not thread-safe; fine for scripts)
 private object ClassIdGen { var c: Long = 1L; fun nextId(): Long = c++ }
 
+private fun DeclAnnotation.toObj(): Obj {
+    val namedArgs = linkedMapOf<Obj, Obj>()
+    for ((k, v) in named) {
+        namedArgs[ObjString(k)] = v
+    }
+    return ObjMap(
+        linkedMapOf(
+            ObjString("name") to ObjString(name),
+            ObjString("positional") to ObjImmutableList(positional),
+            ObjString("named") to ObjMap(namedArgs)
+        )
+    )
+}
+
+private fun annotationListObj(annotations: List<DeclAnnotation>): Obj =
+    ObjImmutableList(annotations.map { it.toObj() })
+
 val ObjClassType by lazy {
     object : ObjClass("Class") {
         override suspend fun deserialize(scope: Scope, decoder: LynonDecoder, lynonType: LynonType?): Obj {
@@ -97,6 +114,30 @@ val ObjClassType by lazy {
             val name = requiredArg<ObjString>(0).value
             val rec = cls.getInstanceMemberOrNull(name)
             rec?.value ?: ObjNull
+        }
+        addFnDoc(
+            name = "getConstructorAnnotations",
+            doc = "Return preserved annotations for a constructor parameter by name as descriptor maps with fields `name`, `positional`, and `named`.",
+            params = listOf(ParamDoc("name", type("lyng.String"))),
+            returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Map"))),
+            moduleName = "lyng.stdlib"
+        ) {
+            val cls = thisAs<ObjClass>()
+            val name = requiredArg<ObjString>(0).value
+            val param = cls.constructorMeta?.params?.firstOrNull { it.name == name }
+            annotationListObj(param?.annotations ?: emptyList())
+        }
+        addFnDoc(
+            name = "getMemberAnnotations",
+            doc = "Return preserved annotations for a member by name as descriptor maps with fields `name`, `positional`, and `named`.",
+            params = listOf(ParamDoc("name", type("lyng.String"))),
+            returns = TypeGenericDoc(type("lyng.List"), listOf(type("lyng.Map"))),
+            moduleName = "lyng.stdlib"
+        ) {
+            val cls = thisAs<ObjClass>()
+            val name = requiredArg<ObjString>(0).value
+            val rec = cls.getInstanceMemberOrNull(name) ?: cls.classScope?.objects?.get(name)
+            annotationListObj(rec?.annotations ?: emptyList())
         }
     }
 }
@@ -851,6 +892,7 @@ open class ObjClass(
         methodId: Int? = null,
         typeDecl: net.sergeych.lyng.TypeDecl? = null,
         callSignature: net.sergeych.lyng.CallSignature? = null,
+        annotations: List<DeclAnnotation> = emptyList(),
     ): ObjRecord {
         // Validation of override rules: only for non-system declarations
         var existing: ObjRecord? = null
@@ -953,6 +995,7 @@ open class ObjClass(
             type = type,
             callSignature = callSignature,
             typeDecl = typeDecl,
+            annotations = annotations,
             memberName = name,
             fieldId = effectiveFieldId,
             methodId = effectiveMethodId
@@ -979,7 +1022,8 @@ open class ObjClass(
         type: ObjRecord.Type = ObjRecord.Type.Field,
         fieldId: Int? = null,
         methodId: Int? = null,
-        callSignature: net.sergeych.lyng.CallSignature? = null
+        callSignature: net.sergeych.lyng.CallSignature? = null,
+        annotations: List<DeclAnnotation> = emptyList()
     ): ObjRecord {
         initClassScope()
         val existing = classScope!!.objects[name]
@@ -1021,6 +1065,7 @@ open class ObjClass(
             recordType = type,
             isTransient = isTransient,
             callSignature = callSignature,
+            annotations = annotations,
             fieldId = effectiveFieldId,
             methodId = effectiveMethodId
         )
@@ -1067,7 +1112,8 @@ open class ObjClass(
         isOverride: Boolean = false,
         pos: Pos = Pos.builtIn,
         prop: ObjProperty? = null,
-        methodId: Int? = null
+        methodId: Int? = null,
+        annotations: List<DeclAnnotation> = emptyList()
     ) {
         val g = getter?.let { ObjExternCallable.fromBridge { it() } }
         val s = setter?.let { ObjExternCallable.fromBridge { it(requiredArg(0)); ObjVoid } }
@@ -1076,7 +1122,8 @@ open class ObjClass(
             name, finalProp, false, visibility, writeVisibility, pos, declaringClass,
             isAbstract = isAbstract, isClosed = isClosed, isOverride = isOverride,
             type = ObjRecord.Type.Property,
-            methodId = methodId
+            methodId = methodId,
+            annotations = annotations
         )
     }
 

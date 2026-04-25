@@ -33,6 +33,7 @@ class InstanceFieldInitStatement(
     val isClosed: Boolean,
     val isOverride: Boolean,
     val isTransient: Boolean,
+    val annotations: List<DeclAnnotation> = emptyList(),
     val isLateInitVal: Boolean,
     val initializer: Statement?,
     override val pos: Pos,
@@ -50,7 +51,8 @@ class InstanceFieldInitStatement(
             isAbstract = isAbstract,
             isClosed = isClosed,
             isOverride = isOverride,
-            isTransient = isTransient
+            isTransient = isTransient,
+            annotations = annotations
         )
         return ObjVoid
     }
@@ -74,6 +76,7 @@ class InstancePropertyInitStatement(
     val isClosed: Boolean,
     val isOverride: Boolean,
     val isTransient: Boolean,
+    val annotations: List<DeclAnnotation> = emptyList(),
     val prop: ObjProperty,
     override val pos: Pos,
 ) : Statement() {
@@ -88,7 +91,8 @@ class InstancePropertyInitStatement(
             isAbstract = isAbstract,
             isClosed = isClosed,
             isOverride = isOverride,
-            isTransient = isTransient
+            isTransient = isTransient,
+            annotations = annotations
         )
         return ObjVoid
     }
@@ -104,6 +108,7 @@ class InstanceDelegatedInitStatement(
     val isClosed: Boolean,
     val isOverride: Boolean,
     val isTransient: Boolean,
+    val annotations: List<DeclAnnotation> = emptyList(),
     val accessTypeLabel: String,
     val initializer: Statement,
     override val pos: Pos,
@@ -130,7 +135,8 @@ class InstanceDelegatedInitStatement(
             isAbstract = isAbstract,
             isClosed = isClosed,
             isOverride = isOverride,
-            isTransient = isTransient
+            isTransient = isTransient,
+            annotations = annotations
         ).apply {
             delegate = finalDelegate
         }

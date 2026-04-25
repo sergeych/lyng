@@ -32,6 +32,7 @@ class ClassStaticFieldInitStatement(
     val initializer: Statement?,
     val isDelegated: Boolean,
     val isTransient: Boolean,
+    val annotationSpecs: List<ParsedDeclAnnotation> = emptyList(),
     private val startPos: Pos,
 ) : Statement() {
     override val pos: Pos = startPos
@@ -39,6 +40,7 @@ class ClassStaticFieldInitStatement(
     override suspend fun execute(scope: Scope): Obj {
         val initValue = initializer?.let { execBytecodeOnly(scope, it, "class static field init") }?.byValueCopy()
             ?: ObjNull
+        val annotations = annotationSpecs.evaluateDeclAnnotations(scope)
         val cls = scope.thisObj as? ObjClass
             ?: scope.raiseIllegalState("static field init requires class scope")
         return if (isDelegated) {
@@ -61,7 +63,8 @@ class ClassStaticFieldInitStatement(
                 writeVisibility,
                 startPos,
                 isTransient = isTransient,
-                type = ObjRecord.Type.Delegated
+                type = ObjRecord.Type.Delegated,
+                annotations = annotations
             ).apply {
                 delegate = finalDelegate
             }
@@ -72,7 +75,8 @@ class ClassStaticFieldInitStatement(
                 visibility,
                 writeVisibility,
                 recordType = ObjRecord.Type.Delegated,
-                isTransient = isTransient
+                isTransient = isTransient,
+                annotations = annotations
             ).apply {
                 delegate = finalDelegate
             }
@@ -85,7 +89,8 @@ class ClassStaticFieldInitStatement(
                 visibility,
                 writeVisibility,
                 startPos,
-                isTransient = isTransient
+                isTransient = isTransient,
+                annotations = annotations
             )
             scope.addItem(
                 name,
@@ -94,7 +99,8 @@ class ClassStaticFieldInitStatement(
                 visibility,
                 writeVisibility,
                 recordType = ObjRecord.Type.Field,
-                isTransient = isTransient
+                isTransient = isTransient,
+                annotations = annotations
             )
             initValue
         }

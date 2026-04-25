@@ -41,6 +41,17 @@ data class ClassDeclSpec(
     val initScope: List<Statement>,
 )
 
+private suspend fun evaluateConstructorAnnotations(scope: Scope, args: ArgsDeclaration?): ArgsDeclaration? {
+    if (args == null) return null
+    if (args.params.none { it.annotationSpecs.isNotEmpty() }) return args
+    return args.copy(
+        params = args.params.map { item ->
+            if (item.annotationSpecs.isEmpty()) item
+            else item.copy(annotations = item.annotationSpecs.evaluateDeclAnnotations(scope))
+        }
+    )
+}
+
 internal suspend fun executeClassDecl(
     scope: Scope,
     spec: ClassDeclSpec,
@@ -61,7 +72,7 @@ internal suspend fun executeClassDecl(
         val newClass = ObjInstanceClass(spec.className, *parentClasses.toTypedArray())
         newClass.isAnonymous = spec.isAnonymous
         newClass.isSingletonObject = true
-        newClass.constructorMeta = ArgsDeclaration(emptyList(), Token.Type.RPAREN)
+        newClass.constructorMeta = evaluateConstructorAnnotations(scope, ArgsDeclaration(emptyList(), Token.Type.RPAREN))
         for (i in parentClasses.indices) {
             val argsList = spec.baseSpecs[i].args
             if (argsList != null) newClass.directParentArgs[parentClasses[i]] = argsList
@@ -86,6 +97,7 @@ internal suspend fun executeClassDecl(
     }
 
     if (spec.isExtern) {
+        val evaluatedConstructorArgs = evaluateConstructorAnnotations(scope, spec.constructorArgs)
         val parentClasses = spec.baseSpecs.mapNotNull { baseSpec ->
             val rec = scope[baseSpec.name]
             val cls = rec?.value as? ObjClass
@@ -106,8 +118,8 @@ internal suspend fun executeClassDecl(
         }
         val stub = resolved ?: ObjInstanceClass(spec.className, *parentClasses.toTypedArray()).apply {
             this.isAbstract = true
-            constructorMeta = spec.constructorArgs
-            spec.constructorArgs?.params?.forEach { p ->
+            constructorMeta = evaluatedConstructorArgs
+            evaluatedConstructorArgs?.params?.forEach { p ->
                 if (p.accessType != null) {
                     createField(
                         p.name,
@@ -118,6 +130,7 @@ internal suspend fun executeClassDecl(
                         pos = Pos.builtIn,
                         isTransient = p.isTransient,
                         type = ObjRecord.Type.ConstructorField,
+                        annotations = p.annotations,
                         fieldId = spec.constructorFieldIds?.get(p.name)
                     )
                 }
@@ -161,16 +174,17 @@ internal suspend fun executeClassDecl(
         }
     }
 
+    val evaluatedConstructorArgs = evaluateConstructorAnnotations(scope, spec.constructorArgs)
     val newClass = ObjInstanceClass(spec.className, *parentClasses.toTypedArray()).also {
         it.isAbstract = spec.isAbstract
         it.isClosed = spec.isClosed
         it.instanceConstructor = constructorCode
-        it.constructorMeta = spec.constructorArgs
+        it.constructorMeta = evaluatedConstructorArgs
         for (i in parentClasses.indices) {
             val argsList = spec.baseSpecs[i].args
             if (argsList != null) it.directParentArgs[parentClasses[i]] = argsList
         }
-        spec.constructorArgs?.params?.forEach { p ->
+        evaluatedConstructorArgs?.params?.forEach { p ->
             if (p.accessType != null) {
                 it.createField(
                     p.name,
@@ -181,6 +195,7 @@ internal suspend fun executeClassDecl(
                     pos = Pos.builtIn,
                     isTransient = p.isTransient,
                     type = ObjRecord.Type.ConstructorField,
+                    annotations = p.annotations,
                     fieldId = spec.constructorFieldIds?.get(p.name)
                 )
             }
