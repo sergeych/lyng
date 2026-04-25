@@ -8003,7 +8003,9 @@ class BytecodeCompiler(
                 stmt.extTypeName,
                 stmt.property,
                 stmt.visibility,
-                stmt.setterVisibility
+                stmt.setterVisibility,
+                stmt.getterTypeDecl,
+                stmt.setterTypeDecl
             )
         )
         val slot = allocSlot()
@@ -8644,29 +8646,73 @@ class BytecodeCompiler(
     }
 
     private fun inferCallReturnClass(ref: CallRef): ObjClass? {
+        fun exactLambdaReturnClass(slot: Int): ObjClass? =
+            exactLambdaRefBySlot[slot]?.inferredReturnClass
+
+        fun callableReturnClassFromSlot(slot: Int): ObjClass? {
+            exactLambdaReturnClass(slot)?.let { return it }
+            typeDeclForSlot(slot)?.let { decl ->
+                val functionDecl = decl as? TypeDecl.Function
+                if (functionDecl != null) {
+                    resolveClassFromTypeDecl(functionDecl.returnType)?.let { return it }
+                }
+            }
+            return null
+        }
+
+        fun callableResultClassOrNull(
+            directReturnClass: ObjClass?,
+            directTypeDecl: TypeDecl?,
+            nameClass: ObjClass?,
+            typeNameFallback: String?
+        ): ObjClass? {
+            if (directReturnClass != null) return directReturnClass
+            if (directTypeDecl is TypeDecl.Function) {
+                return null
+            }
+            if (nameClass == ObjClassType) {
+                return typeNameFallback?.let { resolveTypeNameClass(it) } ?: ObjDynamic.type
+            }
+            if (nameClass == Statement.type) {
+                return null
+            }
+            return nameClass ?: typeNameFallback?.let { resolveTypeNameClass(it) }
+        }
+
         return when (val target = ref.target) {
             is LocalSlotRef -> {
-                callableReturnTypeByScopeId[target.scopeId]?.get(target.slot)
-                    ?: run {
-                        val nameClass = nameObjClass[target.name]
-                        if (nameClass == ObjClassType) {
-                            resolveTypeNameClass(target.name) ?: ObjDynamic.type
-                        } else {
-                            nameClass ?: resolveTypeNameClass(target.name)
-                        }
-                    }
+                val mappedSlot = resolveLocalSlotByRefOrName(target)
+                callableResultClassOrNull(
+                    directReturnClass = mappedSlot?.let { callableReturnClassFromSlot(it) }
+                        ?: exactLambdaRefByScopeId[target.scopeId]?.get(target.slot)?.inferredReturnClass
+                        ?: callableReturnTypeByScopeId[target.scopeId]?.get(target.slot),
+                    directTypeDecl = mappedSlot?.let { typeDeclForSlot(it) }
+                        ?: slotTypeDeclByScopeId[target.scopeId]?.get(target.slot),
+                    nameClass = nameObjClass[target.name],
+                    typeNameFallback = target.name
+                )
             }
             is LocalVarRef -> {
-                callableReturnTypeByName[target.name]
-                    ?: run {
-                        val nameClass = nameObjClass[target.name]
-                        if (nameClass == ObjClassType) {
-                            resolveTypeNameClass(target.name) ?: ObjDynamic.type
-                        } else {
-                            nameClass ?: resolveTypeNameClass(target.name)
-                        }
-                    }
+                val directSlot = resolveDirectNameSlot(target.name)?.slot
+                callableResultClassOrNull(
+                    directReturnClass = directSlot?.let { callableReturnClassFromSlot(it) }
+                        ?: callableReturnTypeByName[target.name],
+                    directTypeDecl = directSlot?.let { typeDeclForSlot(it) },
+                    nameClass = nameObjClass[target.name],
+                    typeNameFallback = target.name
+                )
             }
+            is FastLocalVarRef -> {
+                val directSlot = resolveDirectNameSlot(target.name)?.slot
+                callableResultClassOrNull(
+                    directReturnClass = directSlot?.let { callableReturnClassFromSlot(it) }
+                        ?: callableReturnTypeByName[target.name],
+                    directTypeDecl = directSlot?.let { typeDeclForSlot(it) },
+                    nameClass = nameObjClass[target.name],
+                    typeNameFallback = target.name
+                )
+            }
+            is BoundLocalVarRef -> callableReturnClassFromSlot(target.slotIndex())
             is ConstRef -> target.constValue as? ObjClass
             else -> null
         }

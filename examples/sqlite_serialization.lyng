@@ -45,7 +45,7 @@ val restored = openSqlite(":memory:").transaction { tx ->
     assertEquals(21, restored.state.count)
     assertEquals("updated", restored.note)
     restored
-} as Item
+}
 
 println("Restored item:")
 println("  id=" + restored.id)

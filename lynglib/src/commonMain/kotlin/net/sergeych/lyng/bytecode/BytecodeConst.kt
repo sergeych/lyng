@@ -66,6 +66,8 @@ sealed class BytecodeConst {
         val property: ObjProperty,
         val visibility: Visibility,
         val setterVisibility: Visibility?,
+        val getterTypeDecl: TypeDecl?,
+        val setterTypeDecl: TypeDecl?,
     ) : BytecodeConst()
     data class LocalDecl(
         val name: String,

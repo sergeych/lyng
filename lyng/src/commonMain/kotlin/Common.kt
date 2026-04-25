@@ -32,6 +32,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.sergeych.lyng.EvalSession
+import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.LyngVersion
 import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
@@ -153,8 +154,8 @@ val baseScopeDefer = globalDefer {
     baseCliImportManagerDefer.await().copy().apply {
         invalidateCliModuleCaches()
     }.newStdScope().apply {
-        installCliDeclarations()
         installCliBuiltins()
+        installCliDeclarations()
         addConst("ARGV", ObjList(mutableListOf()))
     }
 }
@@ -364,8 +365,8 @@ private fun registerLocalCliModules(manager: ImportManager, modules: List<LocalC
 
 private suspend fun ImportManager.newCliScope(argv: List<String>): Scope =
     newStdScope().apply {
-        installCliDeclarations()
         installCliBuiltins()
+        installCliDeclarations()
         addConst("ARGV", ObjList(argv.map { ObjString(it) }.toMutableList()))
     }
 
@@ -547,6 +548,15 @@ suspend fun executeSource(source: Source, initialScope: Scope? = null) {
             evalOnCliDispatcher(session, source)
         } catch (e: CliExitRequested) {
             requestedExitCode = e.code
+        } catch (e: ExecutionError) {
+            val cliExit = generateSequence<Throwable>(e) { it.cause }
+                .filterIsInstance<CliExitRequested>()
+                .firstOrNull()
+            if (cliExit != null) {
+                requestedExitCode = cliExit.code
+            } else {
+                throw e
+            }
         }
     } finally {
         shutdownHooks.uninstall()

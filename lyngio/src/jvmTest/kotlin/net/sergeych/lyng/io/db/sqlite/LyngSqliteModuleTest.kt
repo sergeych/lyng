@@ -138,6 +138,47 @@ class LyngSqliteModuleTest {
     }
 
     @Test
+    fun testTransactionGenericReturnTypeFlowsToOuterVal() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db
+            import lyng.io.db.sqlite
+
+            class Payload(name: String, count: Int)
+            class Item(id: Int, title: String, @DbJson meta: Payload, @DbLynon state: Payload) {
+                var note: String = ""
+            }
+
+            val restored = openSqlite(":memory:").transaction { tx ->
+                tx.execute("create table item(id integer not null, title text not null, meta text not null, state blob not null, note text not null)")
+                val item = Item(1, "first", Payload("json", 10), Payload("bin", 20))
+                item.note = "created"
+                tx.execute("insert into item(@cols(?1)) values(@vals(?1))", item)
+                item.title = "second"
+                item.meta = Payload("json2", 11)
+                item.state = Payload("bin2", 21)
+                item.note = "updated"
+                tx.execute("update item set @set(?1 except: \"id\") where id = ?2", item, item.id)
+                val restored = tx.select("select * from item where id = ?", 1).decodeAs<Item>().first
+                assertEquals("second", restored.title)
+                assertEquals("json2", restored.meta.name)
+                assertEquals(11, restored.meta.count)
+                assertEquals("bin2", restored.state.name)
+                assertEquals(21, restored.state.count)
+                assertEquals("updated", restored.note)
+                restored
+            }
+
+            restored.id
+        """.trimIndent()
+
+        val result = Compiler.compile(Source("<sqlite-transaction-return-inference>", code), scope.importManager).execute(scope) as ObjInt
+        assertEquals(1L, result.value)
+    }
+
+    @Test
     fun testDecodeAsProjectsJsonColumnIntoObjectField() = runTest {
         val scope = Script.newScope()
         createSqliteModule(scope.importManager)

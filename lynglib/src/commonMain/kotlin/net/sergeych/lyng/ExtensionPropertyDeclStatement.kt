@@ -24,6 +24,8 @@ class ExtensionPropertyDeclStatement(
     val property: ObjProperty,
     val visibility: Visibility,
     val setterVisibility: Visibility?,
+    val getterTypeDecl: TypeDecl?,
+    val setterTypeDecl: TypeDecl?,
     private val startPos: Pos,
 ) : Statement() {
     override val pos: Pos = startPos

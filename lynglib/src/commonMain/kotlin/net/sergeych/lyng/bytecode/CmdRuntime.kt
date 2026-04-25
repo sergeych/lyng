@@ -3268,7 +3268,14 @@ class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cm
         )
         val getterName = extensionPropertyGetterName(decl.extTypeName, decl.property.name)
         val getterWrapper = ObjExtensionPropertyGetterCallable(decl.property.name, decl.property)
-        frame.ensureScope().addItem(getterName, false, getterWrapper, decl.visibility, recordType = ObjRecord.Type.Fun)
+        frame.ensureScope().addItem(
+            getterName,
+            false,
+            getterWrapper,
+            decl.visibility,
+            recordType = ObjRecord.Type.Fun,
+            typeDecl = decl.getterTypeDecl
+        )
         val getterLocal = resolveLocalSlotIndex(frame.fn, getterName, preferCapture = false)
         if (getterLocal != null) {
             frame.setObjUnchecked(frame.fn.scopeSlotCount + getterLocal, getterWrapper)
@@ -3277,7 +3284,14 @@ class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cm
             val setterName = extensionPropertySetterName(decl.extTypeName, decl.property.name)
             val setterWrapper = ObjExtensionPropertySetterCallable(decl.property.name, decl.property)
             frame.ensureScope()
-                .addItem(setterName, false, setterWrapper, decl.visibility, recordType = ObjRecord.Type.Fun)
+                .addItem(
+                    setterName,
+                    false,
+                    setterWrapper,
+                    decl.visibility,
+                    recordType = ObjRecord.Type.Fun,
+                    typeDecl = decl.setterTypeDecl
+                )
             val setterLocal = resolveLocalSlotIndex(frame.fn, setterName, preferCapture = false)
             if (setterLocal != null) {
                 frame.setObjUnchecked(frame.fn.scopeSlotCount + setterLocal, setterWrapper)

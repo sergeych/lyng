@@ -104,4 +104,39 @@ class TypeInferenceTest {
             Pool(2).closeAll()
         """.trimIndent())
     }
+
+    @Test
+    fun testIterableFirstPreservesElementTypeForBlockReturnInference() = runBlocking<Unit> {
+        eval("""
+            class Item(title: String)
+
+            fun restored() {
+                val values = [Item("ok")]
+                values.first
+            }
+
+            val item = restored()
+            assertEquals("ok", item.title)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testCallableLocalInitializedFromFunctionCallPreservesReturnType() = runBlocking<Unit> {
+        eval("""
+            fun makeAdder(base) {
+                return { x -> x + base + 0.5 }
+            }
+
+            fun run() {
+                val add = makeAdder(2)
+                val value = add(3) + 4
+                assert(value is Real)
+                value
+            }
+
+            val result = run()
+            assert(result is Real)
+            assertEquals(9.5, result)
+        """.trimIndent())
+    }
 }
