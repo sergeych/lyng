@@ -200,6 +200,27 @@ assertThrows(RollbackException) {
 - `execute(clause, params...)` — execute a side-effect statement and return `ExecutionResult`.
 - `transaction(block)` — nested transaction with real savepoint semantics.
 
+`select(...)` and `execute(...)` also support SQL object-expansion macros for declaration-driven writes:
+
+- `@cols(?1)` — expand object argument `?1` to a comma-separated column list
+- `@vals(?1)` — expand object argument `?1` to matching placeholders and bind values
+- `@set(?1)` — expand object argument `?1` to `column = ?` pairs and bind values
+
+Each macro also supports an optional clause-local exclusion list:
+
+```lyng
+tx.execute("update item set @set(?1 except: \"id\", \"createdAt\") where id = ?2", item, item.id)
+```
+
+Example:
+
+```lyng
+tx.execute("insert into item(@cols(?1)) values(@vals(?1))", item)
+tx.execute("update item set @set(?1) where id = ?2", item, item.id)
+```
+
+When a clause uses any of these macros, non-expanded scalar parameters in the same SQL string must use explicit indexed placeholders such as `?2`, `?3`, and so on.
+
 ##### `ResultSet`
 
 - `columns` — positional `SqlColumn` metadata, available before iteration.
@@ -219,12 +240,14 @@ Name-based access fails with `SqlUsageException` if the name is missing or ambig
 
 ##### `DbFieldAdapter`
 
-Custom DB field projection hook used by `@DbDecodeWith(...)`.
+Custom DB field projection hook used by `@DbDecodeWith(...)` and `@DbSerializeWith(...)`.
 
 - `decode(rawValue, column, row, targetType)` — adapt one raw DB field value to a Lyng value for the requested target type.
-- `encode(value, targetType)` — future symmetric hook for SQL parameter encoding.
+- `encode(value, targetType)` — adapt one Lyng value to a direct DB-bindable value for SQL object expansion.
 
 Use `@DbDecodeWith(adapter)` on class constructor parameters and class-body fields/properties that participate in `decodeAs<T>()`.
+
+Use `@DbSerializeWith(adapter)` on constructor parameters and class-body fields/properties that participate in `@cols(...)`, `@vals(...)`, and `@set(...)` object expansion.
 
 Annotation arguments are evaluated once when the declaration is created, and the resulting adapter instance is retained in declaration metadata.
 
@@ -249,6 +272,88 @@ Portable bind values:
 - `Date`, `DateTime`, `Instant`
 
 Unsupported parameter values fail with `SqlUsageException`.
+
+SQL object-expansion write rules:
+
+- constructor parameters participate in projection by declaration order
+- matching serializable class-body fields/properties also participate
+- `@Transient` fields are excluded automatically
+- `@DbExcept` fields are excluded automatically
+- `except:` excludes additional fields for one specific macro use
+- direct DB-bindable values are written as-is
+- `@DbJson` fields are encoded as canonical JSON text
+- `@DbLynon` fields are encoded as Lynon binary
+- `@DbSerializeWith(adapter)` fields are encoded through the adapter
+- unannotated non-bindable object fields fail with `SqlUsageException`
+
+Write-side encoding is intentionally explicit. The runtime does not try to infer target DB column types from SQL text or backend metadata during statement preparation.
+
+Example:
+
+```lyng
+import lyng.io.db
+import lyng.io.db.sqlite
+
+class Payload(name: String, count: Int)
+
+object TrimAdapter: DbFieldAdapter {
+    override fun encode(value, targetType) =
+        when(value) {
+            null -> null
+            else -> value.toString().trim()
+        }
+}
+
+class Item(
+    id: Int,
+    @DbSerializeWith(TrimAdapter) title: String,
+    @DbJson meta: Payload,
+    @DbLynon state: Payload
+) {
+    var note: String = ""
+    @DbExcept var cache: String = ""
+}
+
+val db = openSqlite(":memory:")
+val restored = db.transaction { tx ->
+    tx.execute(
+        "create table item(id integer not null, title text not null, meta text not null, state blob not null, note text not null)"
+    )
+
+    val item = Item(1, "  first  ", Payload("json", 10), Payload("bin", 20))
+    item.note = "created"
+    item.cache = "not stored"
+
+    tx.execute("insert into item(@cols(?1)) values(@vals(?1))", item)
+
+    item.title = "  second  "
+    item.meta = Payload("json2", 11)
+    item.state = Payload("bin2", 21)
+    item.note = "updated"
+
+    tx.execute(
+        "update item set @set(?1 except: \"id\") where id = ?2",
+        item,
+        item.id
+    )
+
+    tx.select("select id, title, meta, state, note from item").decodeAs<Item>().first
+}
+
+assertEquals("second", restored.title)
+assertEquals("json2", restored.meta.name)
+assertEquals(21, restored.state.count)
+assertEquals("updated", restored.note)
+```
+
+This example shows:
+
+- `@DbSerializeWith(...)` trimming a string before write
+- `@DbJson` storing structured data in a text column
+- `@DbLynon` storing structured data in a binary column
+- `@DbExcept` excluding a field from automatic projection
+- `@set(... except: "id")` skipping one field for an update clause
+- `decodeAs<Item>()` reconstructing the object on read
 
 Portable result metadata categories:
 

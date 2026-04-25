@@ -362,6 +362,168 @@ class LyngSqliteModuleTest {
     }
 
     @Test
+    fun testSqlObjectExpansionInsertAndUpdateUseDbAnnotations() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db.sqlite
+
+            class Payload(name: String, count: Int)
+
+            class Item(
+                id: Int,
+                title: String,
+                @DbJson meta: Payload,
+                @DbLynon state: Payload
+            ) {
+                var note: String = ""
+                @DbExcept var cache: String = "skip"
+                @Transient var transientNote: String = "temp"
+            }
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table item(id integer not null, title text not null, meta text not null, state blob not null, note text not null)")
+
+                val item = Item(1, "first", Payload("json", 10), Payload("bin", 20))
+                item.note = "created"
+                tx.execute("insert into item(@cols(?1)) values(@vals(?1))", item)
+
+                item.title = "second"
+                item.meta = Payload("json2", 11)
+                item.state = Payload("bin2", 21)
+                item.note = "updated"
+                item.cache = "must-not-be-written"
+                item.transientNote = "must-not-be-written"
+                tx.execute("update item set @set(?1) where id = ?2", item, 1)
+
+                val restored = tx.select("select id, title, meta, state, note from item").decodeAs<Item>().first
+                assertEquals(1, restored.id)
+                assertEquals("second", restored.title)
+                assertEquals("json2", restored.meta.name)
+                assertEquals(11, restored.meta.count)
+                assertEquals("bin2", restored.state.name)
+                assertEquals(21, restored.state.count)
+                assertEquals("updated", restored.note)
+                restored.state.count
+            }
+        """.trimIndent()
+
+        val result = Compiler.compile(Source("<sqlite-object-expansion>", code), scope.importManager).execute(scope) as ObjInt
+        assertEquals(21L, result.value)
+    }
+
+    @Test
+    fun testSqlObjectExpansionSupportsDbSerializeWithAdapter() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db
+            import lyng.io.db.sqlite
+
+            object TrimAdapter: DbFieldAdapter {
+                override fun encode(value, targetType) =
+                    when(value) {
+                        null -> null
+                        else -> value.toString().trim()
+                    }
+            }
+
+            class User(
+                id: Int,
+                @DbSerializeWith(TrimAdapter) name: String
+            )
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table user(id integer not null, name text not null)")
+                tx.execute("insert into user(@cols(?1)) values(@vals(?1))", User(7, "  Alice  "))
+                val row = tx.select("select id, name from user").first
+                val storedName: String = row["name"] as String
+                assertEquals(7, row["id"])
+                assertEquals("Alice", storedName)
+                storedName.size
+            }
+        """.trimIndent()
+
+        val result = Compiler.compile(Source("<sqlite-object-expansion-adapter>", code), scope.importManager).execute(scope) as ObjInt
+        assertEquals(5L, result.value)
+    }
+
+    @Test
+    fun testSqlObjectExpansionSupportsClauseLevelExceptFilter() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db.sqlite
+
+            class Item(id: Int, title: String, note: String) {
+                var stamp: String = ""
+                @DbExcept var cache: String = "skip"
+            }
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table item(id integer not null, title text not null, note text not null, stamp text not null default '')")
+
+                val item = Item(1, "first", "keep")
+                item.stamp = "created"
+                tx.execute(
+                    "insert into item(@cols(?1 except: \"stamp\")) values(@vals(?1 except: \"stamp\"))",
+                    item
+                )
+
+                item.title = "second"
+                item.note = "changed-but-excluded"
+                item.stamp = "updated"
+                item.cache = "still-skip"
+                tx.execute(
+                    "update item set @set(?1 except: \"id\", \"note\") where id = ?2",
+                    item,
+                    1
+                )
+
+                val restored = tx.select("select id, title, note, stamp from item").decodeAs<Item>().first
+                assertEquals(1, restored.id)
+                assertEquals("second", restored.title)
+                assertEquals("keep", restored.note)
+                assertEquals("updated", restored.stamp)
+                restored.stamp.size
+            }
+        """.trimIndent()
+
+        val result = Compiler.compile(Source("<sqlite-object-expansion-except>", code), scope.importManager).execute(scope) as ObjInt
+        assertEquals(7L, result.value)
+    }
+
+    @Test
+    fun testSqlObjectExpansionRejectsUnannotatedComplexFields() = runTest {
+        val scope = Script.newScope()
+        createSqliteModule(scope.importManager)
+
+        val code = """
+            import lyng.io.db.sqlite
+
+            class Payload(name: String)
+            class BadRecord(id: Int, payload: Payload)
+
+            val db = openSqlite(":memory:")
+            db.transaction { tx ->
+                tx.execute("create table bad_record(id integer not null, payload text not null)")
+                tx.execute("insert into bad_record(@cols(?1)) values(@vals(?1))", BadRecord(1, Payload("x")))
+            }
+        """.trimIndent()
+
+        val error = assertFailsWith<ExecutionError> {
+            Compiler.compile(Source("<sqlite-object-expansion-bad-field>", code), scope.importManager).execute(scope)
+        }
+        assertEquals("SqlUsageException", error.errorObject.objClass.className)
+    }
+
+    @Test
     fun testNestedTransactionRollbackUsesSavepoint() = runTest {
         val scope = Script.newScope()
         createSqliteModule(scope.importManager)

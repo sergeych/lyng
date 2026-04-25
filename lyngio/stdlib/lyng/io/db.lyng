@@ -24,7 +24,9 @@ extern class SqlColumn {
     Adapter interface for custom DB field projection.
 
     Use it with `@DbDecodeWith(adapter)` on class constructor parameters or
-    class-body fields/properties participating in `decodeAs<T>()` projection.
+    class-body fields/properties participating in `decodeAs<T>()` projection,
+    and with `@DbSerializeWith(adapter)` on fields participating in SQL object
+    expansion macros such as `@vals(?1)` and `@set(?1)`.
 
     `targetType` is the requested Lyng target type represented as a runtime
     type object, such as a class or a type expression.
@@ -41,6 +43,10 @@ interface DbFieldAdapter {
 
     /*
         Encode one Lyng value into a database field representation.
+
+        The result must be a direct DB-bindable value:
+        null, Bool, Int, Double/Real, Decimal, String, Buffer, Date, DateTime,
+        or Instant.
     */
     fun encode(value: Object?, targetType: Object): Object? =
         throw NotImplementedException("DB field adapter encode is not implemented")
@@ -185,6 +191,29 @@ extern class SqlTransaction {
         - Date, DateTime, Instant
 
         Unsupported parameter values should fail with `SqlUsageException`.
+
+        SQL object expansion macros are also supported:
+
+        - `@cols(?1)` expands one object argument to a comma-separated column list
+        - `@vals(?1)` expands the same object to matching `?` placeholders and
+          generated bind values
+        - `@set(?1)` expands to `col = ?` pairs and generated bind values
+        - each macro also accepts an optional `except:` filter, for example
+          `@set(?1 except: "id", "updatedAt")`
+
+        When a clause uses `@cols`, `@vals`, or `@set`, any non-expanded scalar
+        parameters in the same clause must use explicit indexed placeholders such
+        as `?2`, `?3`, and so on.
+
+        Projection is declaration-driven:
+
+        - `@Transient` fields are excluded
+        - `@DbExcept` fields are excluded
+        - `except:` excludes additional fields for that specific macro use
+        - `@DbJson` fields are encoded as JSON text
+        - `@DbLynon` fields are encoded as Lynon binary
+        - `@DbSerializeWith(adapter)` fields are encoded through the adapter
+        - unannotated non-primitive fields fail with `SqlUsageException`
     */
     fun select(clause: String, params...): ResultSet
 

@@ -278,3 +278,74 @@ Current recommended projection policy:
 - then Lynon decode for binary columns when the target is not `Buffer`
 - no implicit JSON decode for arbitrary text columns
 - fail on anything else
+
+## Write-side SQL object expansion
+
+The symmetric write-side convenience should be explicit and declaration-driven, but it should not attempt semantic SQL analysis.
+
+Agreed v1 surface:
+
+- `@cols(?1)` expands one object argument to projected column names
+- `@vals(?1)` expands the same object argument to matching placeholders and encoded bind values
+- `@set(?1)` expands the same object argument to `column = ?` pairs and encoded bind values
+- each macro accepts an optional `except:` filter, for example `@set(?1 except: "id", "updatedAt")`
+
+Examples:
+
+```lyng
+tx.execute(
+    "insert into item(@cols(?1)) values(@vals(?1))",
+    item
+)
+
+tx.execute(
+    "update item set @set(?1) where id = ?2",
+    item,
+    item.id
+)
+```
+
+Rules:
+
+- once a clause uses `@cols`, `@vals`, or `@set`, plain sequential `?` placeholders are not allowed in the same clause
+- non-expanded parameters in macro clauses must use explicit indexed placeholders such as `?2`
+- the same object argument may be referenced multiple times
+- object expansion is based on declaration metadata, not SQL metadata
+- v1 excludes `@Transient` and `@DbExcept` fields automatically
+- `except:` excludes additional fields for one specific macro use
+
+### Write-side field encoding policy
+
+Write-side encoding cannot rely on DB column type inference, so non-trivial field serialization must be explicit.
+
+For each projected field:
+
+1. if the value is already directly DB-bindable, bind it as-is
+2. else if `@DbJson` is present, encode to canonical JSON text
+3. else if `@DbLynon` is present, encode to Lynon binary
+4. else if `@DbSerializeWith(adapter)` is present, call `adapter.encode(value, targetType)`
+5. else fail with `SqlUsageException`
+
+Direct DB-bindable values in v1:
+
+- `null`
+- `Bool`
+- `Int`, `Real`, `Decimal`
+- `String`
+- `Buffer`
+- `Date`, `DateTime`, `Instant`
+
+This is intentionally stricter than decode-side behavior. On writes, there is no portable, reliable way to infer the intended target DB representation from SQL text alone.
+
+### Adapter role
+
+`DbFieldAdapter` is now symmetric by design:
+
+- `decode(rawValue, column, row, targetType)` is used by `decodeAs<T>()`
+- `encode(value, targetType)` is used by SQL object expansion
+
+The adapter instance is captured in preserved declaration annotation metadata, not passed ad hoc at the call site.
+
+Future task:
+
+- consider warnings or lints for risky annotation captures such as stateful adapters or closure-capturing instances
