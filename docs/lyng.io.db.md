@@ -1,4 +1,4 @@
-### lyng.io.db — SQL database access for Lyng scripts
+# lyng.io.db — SQL database access for Lyng scripts
 
 This module provides the portable SQL database contract for Lyng. The current shipped providers are SQLite via `lyng.io.db.sqlite` and a JVM-only JDBC bridge via `lyng.io.db.jdbc`.
 
@@ -6,7 +6,7 @@ This module provides the portable SQL database contract for Lyng. The current sh
 
 ---
 
-#### Install the module into a Lyng session
+## Install the module into a Lyng session
 
 For SQLite-backed database access, install both the generic DB module and the SQLite provider:
 
@@ -54,7 +54,7 @@ suspend fun bootstrapJdbc() {
 
 ---
 
-#### Using from Lyng scripts
+## Using from Lyng scripts
 
 Typed SQLite open helper:
 
@@ -188,13 +188,41 @@ assertThrows(RollbackException) {
 
 ---
 
-#### Portable API
+## Runnable serialization sample
 
-##### `Database`
+A complete runnable example is in [examples/sqlite_serialization.lyng](/home/sergeych/dev/lyng/examples/sqlite_serialization.lyng).
+
+It uses:
+
+- `@DbJson`
+- `@DbLynon`
+- `@DbExcept`
+- `@cols(...)`, `@vals(...)`, `@set(...)`
+- `decodeAs<T>()`
+
+The current direct read form that works under `jlyng` is:
+
+```lyng
+tx.select("select * from item where id = ?", 1).decodeAs<Item>().first
+```
+
+If we want a shorter form such as:
+
+```lyng
+tx.selectAllAs<Item>("item where id = ?", 1).first
+```
+
+it should be added as a built-in `SqlTransaction` API. A pure Lyng generic wrapper around `decodeAs<T>()` does not currently preserve `T` reliably enough under `jlyng`.
+
+---
+
+## Portable API
+
+### `Database`
 
 - `transaction(block)` — opens a transaction, commits on normal exit, rolls back on uncaught failure.
 
-##### `SqlTransaction`
+### `SqlTransaction`
 
 - `select(clause, params...)` — execute a statement whose primary result is a row set.
 - `execute(clause, params...)` — execute a side-effect statement and return `ExecutionResult`.
@@ -221,7 +249,7 @@ tx.execute("update item set @set(?1) where id = ?2", item, item.id)
 
 When a clause uses any of these macros, non-expanded scalar parameters in the same SQL string must use explicit indexed placeholders such as `?2`, `?3`, and so on.
 
-##### `ResultSet`
+### `ResultSet`
 
 - `columns` — positional `SqlColumn` metadata, available before iteration.
 - `size()` — result row count.
@@ -230,7 +258,7 @@ When a clause uses any of these macros, non-expanded scalar parameters in the sa
 - `toList()` — materialize detached `SqlRow` snapshots that may be used after the transaction ends.
 - `decodeAs<T>()` — transaction-scoped iterable view that decodes each row into `T`.
 
-##### `SqlRow`
+### `SqlRow`
 
 - `row[index]` — zero-based positional access.
 - `row["columnName"]` — case-insensitive lookup by output column label.
@@ -238,7 +266,7 @@ When a clause uses any of these macros, non-expanded scalar parameters in the sa
 
 Name-based access fails with `SqlUsageException` if the name is missing or ambiguous.
 
-##### `DbFieldAdapter`
+### `DbFieldAdapter`
 
 Custom DB field projection hook used by `@DbDecodeWith(...)` and `@DbSerializeWith(...)`.
 
@@ -251,7 +279,7 @@ Use `@DbSerializeWith(adapter)` on constructor parameters and class-body fields/
 
 Annotation arguments are evaluated once when the declaration is created, and the resulting adapter instance is retained in declaration metadata.
 
-##### `ExecutionResult`
+### `ExecutionResult`
 
 - `affectedRowsCount`
 - `getGeneratedKeys()`
@@ -260,7 +288,7 @@ Statements that return rows directly, such as `... returning ...`, should use `s
 
 ---
 
-#### Value mapping
+## Value mapping
 
 Portable bind values:
 
@@ -387,7 +415,7 @@ For temporal types, see [time functions](time.md).
 
 ---
 
-#### SQLite provider
+## SQLite provider
 
 `lyng.io.db.sqlite` currently provides the first concrete backend.
 
@@ -431,7 +459,7 @@ Open-time validation failures:
 - malformed URL or bad option shape -> `IllegalArgumentException`
 - runtime open failure -> `DatabaseException`
 
-#### JDBC provider
+## JDBC provider
 
 `lyng.io.db.jdbc` is currently implemented on the JVM target only. The `lyngio-jvm` artifact bundles and explicitly loads these JDBC drivers:
 
@@ -503,7 +531,7 @@ PostgreSQL-specific notes:
 
 ---
 
-#### Lifetime rules
+## Lifetime rules
 
 `ResultSet` is valid only while its owning transaction is active.
 
@@ -528,7 +556,7 @@ The same rule applies to generated keys from `ExecutionResult.getGeneratedKeys()
 
 ---
 
-#### Platform support
+## Platform support
 
 - `lyng.io.db` — generic contract, available when host code installs it
 - `lyng.io.db.sqlite` — implemented on JVM and Linux Native in the current release tree
