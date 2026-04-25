@@ -986,10 +986,14 @@ fun rewriteAnchors(
             }
             continue
         }
-        if (href.contains(".md")) {
+        if (href.contains(".md") || href.contains(".lyng")) {
             val parts = href.split('#', limit = 2)
-            val mdPath = parts[0]
+            val rawPath = parts[0]
             val frag = if (parts.size > 1) parts[1] else null
+            val mdPath = when {
+                rawPath.endsWith(".lyng") -> "$rawPath.md"
+                else -> rawPath
+            }
             val target = if (mdPath.startsWith("docs/")) {
                 normalizePath(mdPath)
             } else {

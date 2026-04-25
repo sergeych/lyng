@@ -190,7 +190,7 @@ assertThrows(RollbackException) {
 
 ## Runnable serialization sample
 
-A complete runnable example is in [examples/sqlite_serialization.lyng](/home/sergeych/dev/lyng/examples/sqlite_serialization.lyng).
+A complete runnable example is in [examples/sqlite_serialization.lyng](../examples/sqlite_serialization.lyng).
 
 It uses:
 

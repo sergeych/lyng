@@ -4,7 +4,7 @@ Saved on April 4, 2026 before the `List<Int>` indexed-access follow-up fix.
 
 Benchmark target:
 - [examples/pi-bench.py](/home/sergeych/dev/lyng/examples/pi-bench.py)
-- [examples/pi-bench.lyng](/home/sergeych/dev/lyng/examples/pi-bench.lyng)
+- [examples/pi-bench.lyng](../examples/pi-bench.lyng)
 
 Execution path:
 - Python: `python3 examples/pi-bench.py`

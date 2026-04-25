@@ -21,8 +21,32 @@
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>Lyng language</title>
+    <script>
+        (function () {
+            var path = window.location.pathname || "/";
+            var hash = window.location.hash || "";
+            if (hash) return;
+
+            var normalized = path.replace(/^\/+/, "");
+            var route = null;
+
+            if (normalized.startsWith("docs/") && normalized.endsWith(".md")) {
+                route = normalized;
+            } else if (normalized.startsWith("examples/") && normalized.endsWith(".lyng")) {
+                route = "docs/" + normalized + ".md";
+            } else if (normalized.startsWith("samples/") && normalized.endsWith(".lyng")) {
+                route = "docs/" + normalized + ".md";
+            }
+
+            if (route) {
+                var target = window.location.origin + "/#/" + route;
+                if (window.location.search) target += window.location.search;
+                window.location.replace(target);
+            }
+        })();
+    </script>
     <!-- Site favicon (SVG, adapts to light/dark) -->
-    <link rel="icon" type="image/svg+xml" href="icons/lyng-favicon.svg"/>
+    <link rel="icon" type="image/svg+xml" href="/icons/lyng-favicon.svg"/>
     <!-- GitHub Markdown CSS (light and dark). We toggle these from the app. -->
     <link
             id="md-light"
@@ -332,7 +356,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
     <!-- and it's easy to individually load additional languages -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/languages/go.min.js"></script>
-    <script src="lyng-version.js"></script>
+    <script src="/lyng-version.js"></script>
 
 
 </head>
@@ -455,7 +479,7 @@
 <div id="root" class="pt-4" tabindex="-1" aria-live="polite" aria-atomic="false"></div>
 
 <!-- App bundle (produced by Kotlin/JS). The Gradle config forces this name. -->
-<script src="site.js"></script>
+<script src="/site.js"></script>
 
 <!-- Bootstrap 5.3 JS bundle (includes Popper) -->
 <script

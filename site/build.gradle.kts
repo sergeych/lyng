@@ -78,18 +78,73 @@ kotlin {
 }
 
 // Generate an index of markdown documents under project /docs as a JSON array
+val generateSampleDocPages by tasks.registering {
+    group = "documentation"
+    description = "Generates Markdown wrapper pages for Lyng sample files"
+
+    val examplesDir = rootProject.projectDir.resolve("examples")
+    val docsSamplesDir = rootProject.projectDir.resolve("docs/samples")
+    val outDir = layout.buildDirectory.dir("generated-sample-docs/docs")
+
+    inputs.dir(examplesDir)
+    inputs.dir(docsSamplesDir)
+    outputs.dir(outDir)
+
+    doLast {
+        val outRoot = outDir.get().asFile
+        outRoot.mkdirs()
+
+        fun generateFrom(sourceRoot: java.io.File, targetSubdir: String) {
+            if (!sourceRoot.exists()) return
+            sourceRoot.walkTopDown()
+                .filter { it.isFile && it.extension.equals("lyng", ignoreCase = true) }
+                .forEach { source ->
+                    val rel = sourceRoot.toPath().relativize(source.toPath()).toString().replace('\\', '/')
+                    val target = outRoot.resolve("$targetSubdir/$rel.md")
+                    target.parentFile.mkdirs()
+                    val title = source.name
+                    val sourceText = source.readText()
+                    val body = buildString {
+                        append("# ").append(title).append("\n\n")
+                        append("Generated from `")
+                        append(
+                            when (targetSubdir) {
+                                "examples" -> "examples/$rel"
+                                "samples" -> "docs/samples/$rel"
+                                else -> "$targetSubdir/$rel"
+                            }
+                        )
+                        append("` during site build.\n\n")
+                        append("```lyng\n")
+                        append(sourceText)
+                        if (!sourceText.endsWith("\n")) append('\n')
+                        append("```\n")
+                    }
+                    target.writeText(body)
+                }
+        }
+
+        generateFrom(examplesDir, "examples")
+        generateFrom(docsSamplesDir, "samples")
+    }
+}
+
 val generateDocsIndex by tasks.registering {
     group = "documentation"
     description = "Generates docs-index.json listing all Markdown files under /docs"
 
     val docsDir = rootProject.projectDir.resolve("docs")
+    val generatedDocsDir = layout.buildDirectory.dir("generated-sample-docs/docs")
     val outDir = layout.buildDirectory.dir("generated-resources")
 
     inputs.dir(docsDir)
+    inputs.dir(generatedDocsDir)
     outputs.dir(outDir)
 
+    dependsOn(generateSampleDocPages)
+
     doLast {
-        val docs = mutableListOf<String>()
+        val docs = linkedSetOf<String>()
         if (docsDir.exists()) {
             docsDir.walkTopDown()
                 .filter { it.isFile && it.extension.equals("md", ignoreCase = true) }
@@ -97,6 +152,16 @@ val generateDocsIndex by tasks.registering {
                     val rel = docsDir.toPath().relativize(f.toPath()).toString()
                         .replace('\\', '/')
                     // store paths relative to site root, e.g. "docs/Iterator.md"
+                    docs += "docs/$rel"
+                }
+        }
+        val generatedRoot = generatedDocsDir.get().asFile
+        if (generatedRoot.exists()) {
+            generatedRoot.walkTopDown()
+                .filter { it.isFile && it.extension.equals("md", ignoreCase = true) }
+                .forEach { f ->
+                    val rel = generatedRoot.toPath().relativize(f.toPath()).toString()
+                        .replace('\\', '/')
                     docs += "docs/$rel"
                 }
         }
@@ -113,7 +178,7 @@ val generateDocsIndex by tasks.registering {
             append(']')
         }
         file.writeText(json)
-        println("Generated ${'$'}{file.absolutePath} with ${'$'}{docs.size} entries")
+        println("Generated ${file.absolutePath} with ${docs.size} entries")
     }
 }
 
@@ -137,7 +202,7 @@ val generateSiteVersion by tasks.registering(Copy::class) {
 // Ensure any ProcessResources task depends on docs index generation so the JSON is packaged
 tasks.configureEach {
     if (name.endsWith("ProcessResources")) {
-        dependsOn(generateDocsIndex, generateSiteVersion)
+        dependsOn(generateSampleDocPages, generateDocsIndex, generateSiteVersion)
     }
 }
 
@@ -148,14 +213,18 @@ listOf(
     "jsProcessResources"
 ).forEach { taskName ->
     tasks.matching { it.name == taskName }.configureEach {
-        dependsOn(generateDocsIndex)
+        dependsOn(generateSampleDocPages, generateDocsIndex)
     }
 }
 
 // Copy Markdown docs into the "docs/" folder in the final resources, so paths in docs-index.json match files
 tasks.named<Copy>("jsProcessResources").configure {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     // Ensure we don't end up with two copies at root; we no longer add docs as a plain resources srcDir
     from(rootProject.projectDir.resolve("docs")) {
+        into("docs")
+    }
+    from(layout.buildDirectory.dir("generated-sample-docs/docs")) {
         into("docs")
     }
 }
