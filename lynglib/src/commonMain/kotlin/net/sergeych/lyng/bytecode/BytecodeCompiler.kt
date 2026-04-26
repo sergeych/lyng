@@ -4473,6 +4473,20 @@ class BytecodeCompiler(
     }
 
     private fun compileElvis(ref: ElvisRef): CompiledValue? {
+        fun isAbruptControlRef(candidate: ObjRef): Boolean {
+            var stmt = (candidate as? StatementRef)?.statement ?: return false
+            while (stmt is BytecodeStatement) {
+                stmt = stmt.original
+            }
+            return when (stmt) {
+                is net.sergeych.lyng.BreakStatement,
+                is net.sergeych.lyng.ContinueStatement,
+                is net.sergeych.lyng.ReturnStatement,
+                is net.sergeych.lyng.ThrowStatement -> true
+                else -> false
+            }
+        }
+
         val leftValue = compileRefWithFallback(ref.left, null, Pos.builtIn) ?: return null
         val leftObj = ensureObjSlot(leftValue)
         val resultSlot = allocSlot()
@@ -4489,9 +4503,12 @@ class BytecodeCompiler(
         emitMove(leftObj, resultSlot)
         builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
         builder.mark(rightLabel)
+        val rightIsAbruptControl = isAbruptControlRef(ref.right)
         val rightValue = compileRefWithFallback(ref.right, null, Pos.builtIn) ?: return null
-        val rightObj = ensureObjSlot(rightValue)
-        emitMove(rightObj, resultSlot)
+        if (!rightIsAbruptControl) {
+            val rightObj = ensureObjSlot(rightValue)
+            emitMove(rightObj, resultSlot)
+        }
         builder.mark(endLabel)
         updateSlotType(resultSlot, SlotType.OBJ)
         return CompiledValue(resultSlot, SlotType.OBJ)

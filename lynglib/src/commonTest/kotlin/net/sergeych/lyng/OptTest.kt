@@ -148,6 +148,7 @@ class OptTest {
                 val x = t(cnt++) ?: break
                 assertEquals(100, x)
                 assertEquals(100, needInt(x))
+                assertEquals(101, x + 1)
             }
             assert( t(3) == null )
             assert( cnt == 4 )
