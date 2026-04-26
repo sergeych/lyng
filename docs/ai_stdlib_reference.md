@@ -90,6 +90,7 @@ Requires installing `lyngio` into the import manager from host code.
 - `import lyng.io.process` (process execution API)
 - `import lyng.io.console` (console capabilities, geometry, ANSI/output, events)
 - `import lyng.io.http` (HTTP/HTTPS client API)
+- `import lyng.io.http.server` (minimal HTTP/1.1 and WebSocket server API)
 - `import lyng.io.ws` (WebSocket client API; currently supported on JVM, capability-gated elsewhere)
 - `import lyng.io.net` (TCP/UDP transport API; currently supported on JVM, capability-gated elsewhere)
 - Shared network value-type packages are also available when installed by host code:

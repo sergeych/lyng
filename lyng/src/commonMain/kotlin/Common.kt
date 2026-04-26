@@ -17,8 +17,8 @@
 
 package net.sergeych
 
-import com.github.ajalt.clikt.core.CoreCliktCommand
 import com.github.ajalt.clikt.core.Context
+import com.github.ajalt.clikt.core.CoreCliktCommand
 import com.github.ajalt.clikt.core.main
 import com.github.ajalt.clikt.core.subcommands
 import com.github.ajalt.clikt.parameters.arguments.argument
@@ -46,15 +46,16 @@ import net.sergeych.lyng.io.db.jdbc.createJdbcModule
 import net.sergeych.lyng.io.db.sqlite.createSqliteModule
 import net.sergeych.lyng.io.fs.createFs
 import net.sergeych.lyng.io.http.createHttpModule
+import net.sergeych.lyng.io.http.server.createHttpServerModule
 import net.sergeych.lyng.io.net.createNetModule
 import net.sergeych.lyng.io.ws.createWsModule
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
-import net.sergeych.lyngio.net.shutdownSystemNetEngine
 import net.sergeych.lyngio.console.security.PermitAllConsoleAccessPolicy
 import net.sergeych.lyngio.fs.security.PermitAllAccessPolicy
 import net.sergeych.lyngio.http.security.PermitAllHttpAccessPolicy
 import net.sergeych.lyngio.net.security.PermitAllNetAccessPolicy
+import net.sergeych.lyngio.net.shutdownSystemNetEngine
 import net.sergeych.lyngio.ws.security.PermitAllWsAccessPolicy
 import net.sergeych.mp_tools.globalDefer
 import okio.*
@@ -146,6 +147,7 @@ private fun ImportManager.invalidateCliModuleCaches() {
     invalidatePackageCache("lyng.io.db.jdbc")
     invalidatePackageCache("lyng.io.db.sqlite")
     invalidatePackageCache("lyng.io.http")
+    invalidatePackageCache("lyng.io.http.server")
     invalidatePackageCache("lyng.io.ws")
     invalidatePackageCache("lyng.io.net")
 }
@@ -236,6 +238,7 @@ private fun installCliModules(manager: ImportManager) {
     createJdbcModule(manager)
     createSqliteModule(manager)
     createHttpModule(PermitAllHttpAccessPolicy, manager)
+    createHttpServerModule(PermitAllNetAccessPolicy, manager)
     createWsModule(PermitAllWsAccessPolicy, manager)
     createNetModule(PermitAllNetAccessPolicy, manager)
 }

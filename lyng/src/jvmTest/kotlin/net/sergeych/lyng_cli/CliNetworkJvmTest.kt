@@ -73,10 +73,12 @@ class CliNetworkJvmTest {
         try {
             val script = """
                 import lyng.io.http
+                import lyng.io.http.server
                 import lyng.io.ws
                 import lyng.io.net
 
                 assert(Http.isSupported())
+                assert(HttpServer() is HttpServer)
                 println("ws=" + Ws.isSupported())
                 println("net=" + Net.isSupported())
 

@@ -1,0 +1,19 @@
+import lyng.io.http.server
+
+closed class CreateUserRequest(name: String, age: Int)
+closed class CreateUserResponse(id: Int, name: String, age: Int)
+
+val server = HttpServer()
+
+server.postPath("/api/users") {
+    val req = jsonBody<CreateUserRequest>()
+
+    if (req.name.isBlank()) {
+        respondJson({ error: "name must not be empty" }, 400)
+        return
+    }
+
+    respondJson(CreateUserResponse(101, req.name, req.age), 201)
+}
+
+server.listen(8080, "127.0.0.1")
