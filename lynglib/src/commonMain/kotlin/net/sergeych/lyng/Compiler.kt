@@ -3463,12 +3463,13 @@ class Compiler(
             is FastLocalVarRef -> ref.name
             is LocalSlotRef -> ref.name
             is FieldRef -> ref.name
+            is ImplicitThisMemberRef -> ref.name
             else -> null
         }
         if (name != null) {
             if (lookupGenericFunctionDecl(name) != null) return true
             if (name.firstOrNull()?.isUpperCase() == true) return true
-            return ref is FieldRef
+            return ref is FieldRef || ref is ImplicitThisMemberRef
         }
         return ref is ConstRef && ref.constValue is ObjClass
     }
@@ -3482,6 +3483,13 @@ class Compiler(
         implicitItType: TypeDecl? = null,
         expectedCallableType: TypeDecl.Function? = null
     ): ObjRef {
+        fun receiverTypeName(typeDecl: TypeDecl?): String? = when (typeDecl) {
+            is TypeDecl.Simple -> typeDecl.name
+            is TypeDecl.Generic -> typeDecl.name
+            else -> null
+        }
+
+        val effectiveExpectedReceiverType = expectedReceiverType ?: receiverTypeName(expectedCallableType?.receiver)
         // lambda args are different:
         val startPos = cc.currentPos()
         val label = lastLabel
@@ -3545,7 +3553,13 @@ class Compiler(
         val capturePlan = CapturePlan(paramSlotPlan, isFunction = true, propagateToParentFunction = lambdaDepth > 0)
         capturePlanStack.add(capturePlan)
         val parsedBody = try {
-            inCodeContext(CodeContext.Function("<lambda>", implicitThisMembers = true, implicitThisTypeName = expectedReceiverType)) {
+            inCodeContext(
+                CodeContext.Function(
+                    "<lambda>",
+                    implicitThisMembers = true,
+                    implicitThisTypeName = effectiveExpectedReceiverType
+                )
+            ) {
                 val returnLabels = label?.let { setOf(it) } ?: emptySet()
                 returnLabelStack.addLast(returnLabels)
                 try {
@@ -3798,13 +3812,13 @@ class Compiler(
             inferredReturnClass = returnClass,
             inlineBodyRef = inlineBodyRef,
             supportsDirectInvokeFastPath = supportsDirectInvokeFastPath,
-            preferredThisType = expectedReceiverType,
+            preferredThisType = effectiveExpectedReceiverType,
             wrapAsExtensionCallable = wrapAsExtensionCallable,
             returnLabels = returnLabels,
             pos = startPos
         )
         val lambdaTypeDecl = TypeDecl.Function(
-            receiver = null,
+            receiver = effectiveExpectedReceiverType?.let { TypeDecl.Simple(it, false) },
             params = lambdaParamTypeDecls.toList(),
             returnType = inferredReturnDecl ?: returnClass?.let { TypeDecl.Simple(it.className, false) } ?: TypeDecl.TypeAny,
             nullable = false
@@ -7121,7 +7135,19 @@ class Compiler(
         }
         val result = when (left) {
             is ImplicitThisMemberRef ->
-                if (left.methodId == null && left.fieldId != null) {
+                if (!explicitTypeArgs.isNullOrEmpty()) {
+                    val explicitReceiver: ObjRef = (left.preferredThisTypeName() ?: implicitThisTypeName)
+                        ?.let { QualifiedThisRef(it, left.atPos) }
+                        ?: LocalVarRef("this", left.atPos)
+                    MethodCallRef(
+                        explicitReceiver,
+                        left.name,
+                        args,
+                        detectedBlockArgument,
+                        isOptional,
+                        explicitTypeArgs
+                    )
+                } else if (left.methodId == null && left.fieldId != null) {
                     CallRef(left, args, detectedBlockArgument, isOptional, explicitTypeArgs).also { callRef ->
                         applyExplicitCallTypeArgs(callRef, explicitTypeArgs)
                     }

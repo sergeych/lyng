@@ -43,12 +43,41 @@ suspend fun bootstrapHttpServer() {
 import lyng.io.http.server
 
 val server = HttpServer()
-server.get("/hello") { ex ->
-    ex.setHeader("Content-Type", "text/plain")
-    ex.respondText(200, "hello")
+server.get("/hello") {
+    setHeader("Content-Type", "text/plain")
+    respondText(200, "hello")
 }
 server.listen(8080, "127.0.0.1")
 ```
+
+---
+
+#### Reusable routers
+
+`Router` collects the same route kinds as `HttpServer`, but does not listen on sockets by itself.  
+Mount it into `HttpServer` or another `Router`.
+
+```lyng
+import lyng.io.http.server
+
+val api = Router()
+api.get("/health") {
+    respondText(200, "ok")
+}
+
+val users = Router()
+users.getPath("/users/{id}") {
+    respondJson({ id: routeParams["id"] })
+}
+
+api.mount(users)
+
+val server = HttpServer()
+server.mount(api)
+server.listen(8080, "127.0.0.1")
+```
+
+Mounted routers reuse the built-in server router. They are configuration-time composition, not an extra per-request Lyng dispatch layer.
 
 ---
 
@@ -57,9 +86,9 @@ server.listen(8080, "127.0.0.1")
 Regex routes match the whole request path, not a substring.
 
 ```lyng
-server.get("^/users/([0-9]+)/posts/([0-9]+)$".re) { ex ->
-    val m = ex.routeMatch!!
-    ex.respondText(200, "user=" + m[1] + ", post=" + m[2])
+server.get("^/users/([0-9]+)/posts/([0-9]+)$".re) {
+    val m = routeMatch!!
+    respondText(200, "user=" + m[1] + ", post=" + m[2])
 }
 ```
 
@@ -70,10 +99,10 @@ server.get("^/users/([0-9]+)/posts/([0-9]+)$".re) { ex ->
 Path templates are sugar on top of regex routes. Template parameters are exposed as decoded `routeParams`.
 
 ```lyng
-server.getPath("/users/{userId}/posts/{postId}") { ex ->
-    ex.respondText(
+server.getPath("/users/{userId}/posts/{postId}") {
+    respondText(
         200,
-        ex.routeParams["userId"] + ":" + ex.routeParams["postId"]
+        routeParams["userId"] + ":" + routeParams["postId"]
     )
 }
 ```
@@ -104,7 +133,7 @@ Template rules:
 - `headers: HttpHeaders`
 - `body: Buffer`
 
-`ServerExchange` exposes routing context and response controls:
+`RequestContext` exposes routing context and response controls:
 
 - `request: ServerRequest`
 - `routeMatch: RegexMatch?`
@@ -125,7 +154,7 @@ For path-template routes, both `routeMatch` and `routeParams` are set.
 
 #### JSON request/response helpers
 
-For ordinary HTTP JSON APIs, `ServerExchange` includes two helpers:
+For ordinary HTTP JSON APIs, `RequestContext` includes two helpers:
 
 - `jsonBody<T>()` decodes the request body with typed `Json.decodeAs(...)`
 - `respondJson(body, status = 200)` sets JSON content type and responds with plain `toJsonString()`
@@ -140,15 +169,15 @@ closed class CreateUserResponse(id: Int, name: String, age: Int)
 
 val server = HttpServer()
 
-server.postPath("/api/users") { ex ->
-    val req = ex.jsonBody<CreateUserRequest>()
+server.postPath("/api/users") {
+    val req = jsonBody<CreateUserRequest>()
 
     if (req.name.isBlank()) {
-        ex.respondJson({ error: "name must not be empty" }, 400)
+        respondJson({ error: "name must not be empty" }, 400)
         return
     }
 
-    ex.respondJson(CreateUserResponse(101, req.name, req.age), 201)
+    respondJson(CreateUserResponse(101, req.name, req.age), 201)
 }
 
 server.listen(8080, "127.0.0.1")
@@ -177,13 +206,13 @@ This means exact routes stay fast and always win over template or regex routes f
 You can route websocket upgrades by exact path, regex, or path template:
 
 ```lyng
-server.ws("/chat") { ws, ex ->
+server.ws("/chat") { ws ->
     ws.sendText("hello")
     ws.close()
 }
 
-server.wsPath("/ws/{room}") { ws, ex ->
-    ws.sendText("room=" + ex.routeParams["room"])
+server.wsPath("/ws/{room}") { ws ->
+    ws.sendText("room=" + routeParams["room"])
     ws.close()
 }
 ```
@@ -191,6 +220,23 @@ server.wsPath("/ws/{room}") { ws, ex ->
 ---
 
 #### API surface
+
+`Router` route registration methods:
+
+- `get(path: String|Regex, handler)`
+- `getPath(pathTemplate: String, handler)`
+- `post(path: String|Regex, handler)`
+- `postPath(pathTemplate: String, handler)`
+- `put(path: String|Regex, handler)`
+- `putPath(pathTemplate: String, handler)`
+- `delete(path: String|Regex, handler)`
+- `deletePath(pathTemplate: String, handler)`
+- `any(path: String|Regex, handler)`
+- `anyPath(pathTemplate: String, handler)`
+- `ws(path: String|Regex, handler)`
+- `wsPath(pathTemplate: String, handler)`
+- `fallback(handler)`
+- `mount(router)`
 
 `HttpServer` route registration methods:
 
@@ -207,4 +253,5 @@ server.wsPath("/ws/{room}") { ws, ex ->
 - `ws(path: String|Regex, handler)`
 - `wsPath(pathTemplate: String, handler)`
 - `fallback(handler)`
+- `mount(router)`
 - `listen(port, host = null, backlog = 128)`

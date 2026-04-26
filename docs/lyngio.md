@@ -17,7 +17,7 @@
 - **[lyng.io.process](lyng.io.process.md):** External process execution and shell commands. Provides `Process`, `RunningProcess`, and `Platform` information.
 - **[lyng.io.console](lyng.io.console.md):** Rich console/TTY access. Provides `Console` capability detection, geometry, output, and iterable events.
 - **[lyng.io.http](lyng.io.http.md):** HTTP/HTTPS client access. Provides `Http`, `HttpRequest`, `HttpResponse`, and `HttpHeaders`.
-- **[lyng.io.http.server](lyng.io.http.server.md):** Minimal HTTP/1.1 and WebSocket server. Provides `HttpServer`, `ServerRequest`, `ServerExchange`, and `ServerWebSocket`.
+- **[lyng.io.http.server](lyng.io.http.server.md):** Minimal HTTP/1.1 and WebSocket server. Provides `HttpServer`, `Router`, `ServerRequest`, `RequestContext`, and `ServerWebSocket`.
 - **[lyng.io.ws](lyng.io.ws.md):** WebSocket client access. Provides `Ws`, `WsSession`, and `WsMessage`.
 - **[lyng.io.net](lyng.io.net.md):** Transport networking. Provides `Net`, `TcpSocket`, `TcpServer`, `UdpSocket`, and `SocketAddress`.
 - **Shared networking type packages:** `lyng.io.http.types`, `lyng.io.ws.types`, and `lyng.io.net.types` expose reusable value types such as `HttpHeaders`, `WsMessage`, `IpVersion`, `SocketAddress`, and `Datagram` when host code wants type-only imports without installing the corresponding capability object module.

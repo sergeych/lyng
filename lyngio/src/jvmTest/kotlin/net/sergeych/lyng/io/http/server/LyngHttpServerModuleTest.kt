@@ -51,12 +51,12 @@ class LyngHttpServerModuleTest {
             import lyng.io.http.server
 
             val server = HttpServer()
-            server.get("/hello") { ex ->
-                ex.setHeader("Content-Type", "text/plain")
-                ex.respondText(200, "hello from lyng")
+            server.get("/hello") {
+                setHeader("Content-Type", "text/plain")
+                respondText(200, "hello from lyng")
             }
-            server.fallback { ex ->
-                ex.respondText(404, "miss:" + ex.request.path)
+            server.fallback {
+                respondText(404, "miss:" + request.path)
             }
             server.listen(0, "127.0.0.1")
         """.trimIndent()
@@ -101,11 +101,11 @@ class LyngHttpServerModuleTest {
             import lyng.io.http.server
 
             val server = HttpServer()
-            server.get("/query") { ex ->
-                val q = ex.request.query
-                ex.respondText(
+            server.get("/query") {
+                val q = request.query
+                respondText(
                     200,
-                    (ex.request.queryString ?: "<null>") +
+                    (request.queryString ?: "<null>") +
                         "|" + q.size +
                         "|" + (q["a"] ?: "<null>") +
                         "|" + (q["b"] ?: "<null>") +
@@ -165,20 +165,20 @@ class LyngHttpServerModuleTest {
             import lyng.io.http.server
 
             val server = HttpServer()
-            server.get("^/users/([0-9]+)/posts/([0-9]+)$".re) { ex ->
-                val m = ex.routeMatch!!
-                ex.respondText(
+            server.get("^/users/([0-9]+)/posts/([0-9]+)$".re) {
+                val m = routeMatch!!
+                respondText(
                     200,
                     m[1] +
                         "|" + m[2] +
-                        "|" + ex.request.pathParts[0] +
-                        "," + ex.request.pathParts[1] +
-                        "," + ex.request.pathParts[2] +
-                        "," + ex.request.pathParts[3]
+                        "|" + request.pathParts[0] +
+                        "," + request.pathParts[1] +
+                        "," + request.pathParts[2] +
+                        "," + request.pathParts[3]
                 )
             }
-            server.get("/users/fixed/posts/9") { ex ->
-                ex.respondText(200, "fixed|" + (ex.routeMatch == null))
+            server.get("/users/fixed/posts/9") {
+                respondText(200, "fixed|" + (routeMatch == null))
             }
             server.listen(0, "127.0.0.1")
         """.trimIndent()
@@ -223,17 +223,17 @@ class LyngHttpServerModuleTest {
             import lyng.io.http.server
 
             val server = HttpServer()
-            server.get("/users/fixed/posts/9") { ex ->
-                ex.respondText(200, "fixed|" + ex.routeParams.size)
+            server.get("/users/fixed/posts/9") {
+                respondText(200, "fixed|" + routeParams.size)
             }
-            server.getPath("/users/{userId}/posts/{postId}") { ex ->
-                ex.respondText(
+            server.getPath("/users/{userId}/posts/{postId}") {
+                respondText(
                     200,
-                    ex.routeParams["userId"] + "|" +
-                        ex.routeParams["postId"] + "|" +
-                        ex.request.pathParts[1] + "|" +
-                        ex.request.pathParts[3] + "|" +
-                        (ex.routeMatch != null)
+                    routeParams["userId"] + "|" +
+                        routeParams["postId"] + "|" +
+                        request.pathParts[1] + "|" +
+                        request.pathParts[3] + "|" +
+                        (routeMatch != null)
                 )
             }
             server.listen(0, "127.0.0.1")
@@ -282,9 +282,9 @@ class LyngHttpServerModuleTest {
             closed class CreateUserResponse(id: Int, name: String, age: Int)
 
             val server = HttpServer()
-            server.postPath("/api/users") { ex ->
-                val req = ex.jsonBody<CreateUserRequest>()
-                ex.respondJson(CreateUserResponse(101, req.name, req.age), 201)
+            server.postPath("/api/users") {
+                val req = jsonBody<CreateUserRequest>()
+                respondJson(CreateUserResponse(101, req.name, req.age), 201)
             }
             server.listen(0, "127.0.0.1")
         """.trimIndent()
@@ -310,6 +310,76 @@ class LyngHttpServerModuleTest {
             assertTrue(response.endsWith("""{"id":101,"name":"alice","age":30}"""), response)
         } finally {
             client.close()
+        }
+
+        handle.invokeInstanceMethod(scope, "close")
+    }
+
+    @Test
+    fun routerMountPreservesBuiltInRoutingSemantics() = runBlocking {
+        val engine = getSystemNetEngine()
+        if (!engine.isSupported || !engine.isTcpAvailable) return@runBlocking
+
+        val scope = Script.newScope()
+        createHttpServerModule(PermitAllNetAccessPolicy, scope)
+
+        val code = """
+            import lyng.io.http.server
+
+            val api = Router()
+            api.get("/health") {
+                respondText(200, "ok")
+            }
+
+            val users = Router()
+            users.getPath("/users/{id}") {
+                respondText(200, "user:" + routeParams["id"])
+            }
+            users.fallback {
+                respondText(404, "router-miss:" + request.path)
+            }
+
+            api.mount(users)
+
+            val server = HttpServer()
+            server.mount(api)
+            server.listen(0, "127.0.0.1")
+        """.trimIndent()
+
+        val handle = Compiler.compile(code).execute(scope)
+        val port = waitForPort(handle, scope)
+
+        val client = engine.tcpConnect("127.0.0.1", port, 2_000, true)
+        try {
+            client.writeUtf8("GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            client.flush()
+            val response = readHttpResponse(client)
+            assertTrue(response.contains("200 OK"), response)
+            assertTrue(response.endsWith("ok"), response)
+        } finally {
+            client.close()
+        }
+
+        val client2 = engine.tcpConnect("127.0.0.1", port, 2_000, true)
+        try {
+            client2.writeUtf8("GET /users/alice HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            client2.flush()
+            val response = readHttpResponse(client2)
+            assertTrue(response.contains("200 OK"), response)
+            assertTrue(response.endsWith("user:alice"), response)
+        } finally {
+            client2.close()
+        }
+
+        val client3 = engine.tcpConnect("127.0.0.1", port, 2_000, true)
+        try {
+            client3.writeUtf8("GET /missing HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            client3.flush()
+            val response = readHttpResponse(client3)
+            assertTrue(response.contains("404"), response)
+            assertTrue(response.endsWith("router-miss:/missing"), response)
+        } finally {
+            client3.close()
         }
 
         handle.invokeInstanceMethod(scope, "close")

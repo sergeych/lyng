@@ -28,7 +28,7 @@ extern class ServerWebSocket {
 }
 
 /* Mutable exchange object for one incoming request. */
-extern class ServerExchange {
+extern class RequestContext {
     val request: ServerRequest
     val routeMatch: RegexMatch?
     val routeParams: Map<String, String>
@@ -38,7 +38,7 @@ extern class ServerExchange {
     fun respondJson(body: Object?, status: Int = 200): void
     fun setHeader(name: String, value: String): void
     fun addHeader(name: String, value: String): void
-    fun acceptWebSocket(handler: (ServerWebSocket, ServerExchange) -> Object?): void
+    fun acceptWebSocket(handler: RequestContext.(ServerWebSocket) -> Object?): void
     fun isHandled(): Bool
 }
 
@@ -48,20 +48,39 @@ extern class HttpServerHandle {
     fun close(): void
 }
 
-/* Exact-path HTTP/WebSocket server with built-in router. */
+/* Reusable route collection mounted into HttpServer or other Router. */
+extern class Router {
+    fun get(path: String|Regex, handler: RequestContext.() -> Object?): Router
+    fun getPath(pathTemplate: String, handler: RequestContext.() -> Object?): Router
+    fun post(path: String|Regex, handler: RequestContext.() -> Object?): Router
+    fun postPath(pathTemplate: String, handler: RequestContext.() -> Object?): Router
+    fun put(path: String|Regex, handler: RequestContext.() -> Object?): Router
+    fun putPath(pathTemplate: String, handler: RequestContext.() -> Object?): Router
+    fun delete(path: String|Regex, handler: RequestContext.() -> Object?): Router
+    fun deletePath(pathTemplate: String, handler: RequestContext.() -> Object?): Router
+    fun any(path: String|Regex, handler: RequestContext.() -> Object?): Router
+    fun anyPath(pathTemplate: String, handler: RequestContext.() -> Object?): Router
+    fun ws(path: String|Regex, handler: RequestContext.(ServerWebSocket) -> Object?): Router
+    fun wsPath(pathTemplate: String, handler: RequestContext.(ServerWebSocket) -> Object?): Router
+    fun fallback(handler: RequestContext.() -> Object?): Router
+    fun mount(router: Router): Router
+}
+
+/* HTTP/WebSocket server with built-in router. */
 extern class HttpServer {
-    fun get(path: String|Regex, handler: (ServerExchange) -> Object?): HttpServer
-    fun getPath(pathTemplate: String, handler: (ServerExchange) -> Object?): HttpServer
-    fun post(path: String|Regex, handler: (ServerExchange) -> Object?): HttpServer
-    fun postPath(pathTemplate: String, handler: (ServerExchange) -> Object?): HttpServer
-    fun put(path: String|Regex, handler: (ServerExchange) -> Object?): HttpServer
-    fun putPath(pathTemplate: String, handler: (ServerExchange) -> Object?): HttpServer
-    fun delete(path: String|Regex, handler: (ServerExchange) -> Object?): HttpServer
-    fun deletePath(pathTemplate: String, handler: (ServerExchange) -> Object?): HttpServer
-    fun any(path: String|Regex, handler: (ServerExchange) -> Object?): HttpServer
-    fun anyPath(pathTemplate: String, handler: (ServerExchange) -> Object?): HttpServer
-    fun ws(path: String|Regex, handler: (ServerWebSocket, ServerExchange) -> Object?): HttpServer
-    fun wsPath(pathTemplate: String, handler: (ServerWebSocket, ServerExchange) -> Object?): HttpServer
-    fun fallback(handler: (ServerExchange) -> Object?): HttpServer
+    fun get(path: String|Regex, handler: RequestContext.() -> Object?): HttpServer
+    fun getPath(pathTemplate: String, handler: RequestContext.() -> Object?): HttpServer
+    fun post(path: String|Regex, handler: RequestContext.() -> Object?): HttpServer
+    fun postPath(pathTemplate: String, handler: RequestContext.() -> Object?): HttpServer
+    fun put(path: String|Regex, handler: RequestContext.() -> Object?): HttpServer
+    fun putPath(pathTemplate: String, handler: RequestContext.() -> Object?): HttpServer
+    fun delete(path: String|Regex, handler: RequestContext.() -> Object?): HttpServer
+    fun deletePath(pathTemplate: String, handler: RequestContext.() -> Object?): HttpServer
+    fun any(path: String|Regex, handler: RequestContext.() -> Object?): HttpServer
+    fun anyPath(pathTemplate: String, handler: RequestContext.() -> Object?): HttpServer
+    fun ws(path: String|Regex, handler: RequestContext.(ServerWebSocket) -> Object?): HttpServer
+    fun wsPath(pathTemplate: String, handler: RequestContext.(ServerWebSocket) -> Object?): HttpServer
+    fun fallback(handler: RequestContext.() -> Object?): HttpServer
+    fun mount(router: Router): HttpServer
     fun listen(port: Int, host: String? = null, backlog: Int = 128): HttpServerHandle
 }
