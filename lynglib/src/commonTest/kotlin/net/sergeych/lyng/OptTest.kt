@@ -134,4 +134,23 @@ class OptTest {
             assertEquals((1..10).toSet(), result)
         """.trimIndent())
     }
+
+    @Test
+    fun testElvisBreak() = runTest {
+        eval("""
+            fun t(x: Int?): Int? =
+                if( x == null || x == 3 ) null
+                else 100
+            fun needInt(x: Int): Int = x
+                
+            var cnt = -1    
+            while( true ) {
+                val x = t(cnt++) ?: break
+                assertEquals(100, x)
+                assertEquals(100, needInt(x))
+            }
+            assert( t(3) == null )
+            assert( cnt == 4 )
+        """.trimIndent())
+    }
 }

@@ -1,4 +1,4 @@
-### lyng.io.ws — WebSocket client for Lyng scripts
+# `lyng.io.ws` - WebSocket client for Lyng scripts
 
 This module provides a compact WebSocket client API for Lyng scripts. It is implemented in `lyngio` and currently backed by Ktor WebSockets on the JVM.
 
@@ -6,11 +6,9 @@ This module provides a compact WebSocket client API for Lyng scripts. It is impl
 >
 > **Shared type note:** `WsMessage` is also available from `lyng.io.ws.types` when host code wants the reusable message type without depending on the WebSocket client module itself.
 
----
+## Install The Module Into A Lyng Session
 
-#### Install the module into a Lyng session
-
-Kotlin (host) bootstrap example:
+Kotlin host bootstrap example:
 
 ```kotlin
 import net.sergeych.lyng.EvalSession
@@ -26,59 +24,189 @@ suspend fun bootstrapWs() {
 }
 ```
 
----
+## Using From Lyng Scripts
 
-#### Using from Lyng scripts
+### Text Exchange
 
-Simple text message exchange:
+```lyng
+import lyng.io.ws
 
-    import lyng.io.ws
+val ws = Ws.connect(WS_TEST_URL)
+ws.sendText("ping")
+val m: WsMessage = ws.receive()
+ws.close()
+[ws.url() == WS_TEST_URL, m.isText, m.text]
+>>> [true,true,echo:ping]
+```
 
-    val ws = Ws.connect(WS_TEST_URL)
+### Binary Exchange
+
+```lyng
+import lyng.buffer
+import lyng.io.ws
+
+val ws = Ws.connect(WS_TEST_BINARY_URL)
+ws.sendBytes(Buffer(9, 8, 7))
+val m: WsMessage = ws.receive()
+ws.close()
+[m.isText, (m.data as Buffer).hex]
+>>> [false,010203090807]
+```
+
+### Secure `wss` Exchange
+
+```lyng
+import lyng.io.ws
+
+val ws = Ws.connect(WSS_TEST_URL)
+ws.sendText("ping")
+val m: WsMessage = ws.receive()
+ws.close()
+[ws.url() == WSS_TEST_URL, m.text]
+>>> [true,secure:ping]
+```
+
+## Message Flow And Session Lifecycle
+
+### Reading Incoming Messages
+
+Call `ws.receive()` to wait for the next application message.
+
+What `receive()` returns:
+- `WsMessage` for the next text or binary message.
+- `null` after the peer closes the connection cleanly.
+- `null` after the transport has already been closed and no more messages can arrive.
+
+What reaches Lyng code:
+- Text frames are exposed as `WsMessage(isText = true, text = ...)`.
+- Binary frames are exposed as `WsMessage(isText = false, data = ...)`.
+- Fragmented websocket messages are reassembled before they are returned.
+- Ping and pong control frames are handled internally and are not returned by `receive()`.
+- Incoming close frames are handled internally; after that `receive()` returns `null`.
+
+Typical receive loop:
+
+```lyng
+import lyng.buffer
+import lyng.io.ws
+
+val ws = Ws.connect(WS_URL)
+
+while (true) {
+    val msg = ws.receive() ?: break
+
+    if (msg.isText) {
+        println("text=" + msg.text)
+    } else {
+        println("bytes=" + ((msg.data as Buffer).size))
+    }
+}
+
+println("peer closed the websocket")
+```
+
+### Sending Outgoing Messages
+
+Use:
+- `ws.sendText(text)` for UTF-8 text messages.
+- `ws.sendBytes(data)` for binary messages.
+
+Example:
+
+```lyng
+import lyng.buffer
+import lyng.io.ws
+
+val ws = Ws.connect(WS_URL)
+ws.sendText("hello")
+ws.sendBytes(Buffer(1, 2, 3, 4))
+```
+
+Send behavior:
+- Each call sends one websocket message.
+- The API does not expose partial-frame streaming; send the whole message in one call.
+- If the session is already closed, `sendText(...)` and `sendBytes(...)` fail with a websocket error.
+- If the transport breaks during send, the session is released and the send call fails.
+
+### Detecting Closed Connections
+
+Use both signals together:
+- `ws.isOpen()` tells you whether the session is still considered open right now.
+- `ws.receive() == null` tells you the receive side has reached the end of the websocket session.
+
+Practical rule:
+- If `receive()` returns `null`, stop reading and treat the session as closed.
+- After close has been observed, do not attempt further sends.
+
+The API does not currently expose the peer close code or close reason to Lyng code.
+
+### Closing The Connection Yourself
+
+Call `ws.close()` when you are done.
+
+```lyng
+import lyng.io.ws
+
+val ws = Ws.connect(WS_URL)
+ws.sendText("bye")
+ws.close(1000, "done")
+```
+
+Close semantics:
+- `close()` sends a websocket close frame with the given code and reason.
+- Defaults are `code = 1000` and `reason = ""`.
+- After `close()`, the session is released locally and should be treated as closed immediately.
+- Calling `close()` on an already closed session is a no-op.
+- After local close, `receive()` returns `null` and further sends fail.
+
+### Recommended Usage Pattern
+
+For request-response style exchanges:
+
+```lyng
+import lyng.io.ws
+
+val ws = Ws.connect(WS_URL)
+try {
     ws.sendText("ping")
-    val m: WsMessage = ws.receive()
+    val reply = ws.receive() ?: error("socket closed before reply")
+    println(reply.text)
+} finally {
     ws.close()
-    [ws.url() == WS_TEST_URL, m.isText, m.text]
-    >>> [true,true,echo:ping]
+}
+```
 
-Binary message exchange:
+For long-lived consumers:
 
-    import lyng.buffer
-    import lyng.io.ws
+```lyng
+import lyng.io.ws
 
-    val ws = Ws.connect(WS_TEST_BINARY_URL)
-    ws.sendBytes(Buffer(9, 8, 7))
-    val m: WsMessage = ws.receive()
+val ws = Ws.connect(WS_URL)
+
+try {
+    while (true) {
+        val msg = ws.receive() ?: break
+        if (msg.isText) {
+            println(msg.text)
+        }
+    }
+} finally {
     ws.close()
-    [m.isText, (m.data as Buffer).hex]
-    >>> [false,010203090807]
+}
+```
 
-Secure websocket (`wss`) exchange:
+## API Reference
 
-    import lyng.io.ws
+### `Ws`
 
-    val ws = Ws.connect(WSS_TEST_URL)
-    ws.sendText("ping")
-    val m: WsMessage = ws.receive()
-    ws.close()
-    [ws.url() == WSS_TEST_URL, m.text]
-    >>> [true,secure:ping]
-
----
-
-#### API reference
-
-##### `Ws` (static methods)
-
-- `isSupported(): Bool` — Whether WebSocket client support is available on the current runtime.
-- `connect(url: String, headers...): WsSession` — Open a client websocket session.
+- `isSupported(): Bool` - whether WebSocket client support is available on the current runtime.
+- `connect(url: String, headers...): WsSession` - open a client websocket session.
 
 `headers...` accepts:
+- `MapEntry`, for example `"Authorization" => "Bearer x"`
+- 2-item lists, for example `["Authorization", "Bearer x"]`
 
-- `MapEntry`, e.g. `"Authorization" => "Bearer x"`
-- 2-item lists, e.g. `["Authorization", "Bearer x"]`
-
-##### `WsSession`
+### `WsSession`
 
 - `isOpen(): Bool`
 - `url(): String`
@@ -87,24 +215,27 @@ Secure websocket (`wss`) exchange:
 - `receive(): WsMessage?`
 - `close(code: Int = 1000, reason: String = ""): void`
 
-`receive()` returns `null` after a clean close.
+Behavior summary:
+- `receive()` returns `null` after close.
+- `close()` is safe to call more than once.
+- send operations require an open session.
 
-##### `WsMessage`
+### `WsMessage`
 
 - `isText: Bool`
 - `text: String?`
 - `data: Buffer?`
 
-Text messages populate `text`; binary messages populate `data`.
+Payload rules:
+- Text messages populate `text` and leave `data == null`.
+- Binary messages populate `data` and leave `text == null`.
 
----
-
-#### Security policy
+## Security Policy
 
 The module uses `WsAccessPolicy` to authorize websocket operations.
 
-- `WsAccessPolicy` — interface for custom policies
-- `PermitAllWsAccessPolicy` — allows all websocket operations
+- `WsAccessPolicy` - interface for custom policies.
+- `PermitAllWsAccessPolicy` - allows all websocket operations.
 - `WsAccessOp.Connect(url)`
 - `WsAccessOp.Send(url, bytes, isText)`
 - `WsAccessOp.Receive(url)`
@@ -137,14 +268,12 @@ val allowLocalOnly = object : WsAccessPolicy {
 }
 ```
 
----
+## Platform Support
 
-#### Platform support
-
-- **JVM:** supported
-- **Android:** supported via the Ktor CIO websocket client backend
-- **JS:** supported via the Ktor JS websocket client backend
-- **Linux native:** supported via the Ktor Curl websocket client backend
-- **Windows native:** supported via the Ktor WinHttp websocket client backend
-- **Apple native:** supported via the Ktor Darwin websocket client backend
-- **Other targets:** may report unsupported; use `Ws.isSupported()` before relying on websocket client access
+- **JVM:** supported.
+- **Android:** supported via the Ktor CIO websocket client backend.
+- **JS:** supported via the Ktor JS websocket client backend.
+- **Linux native:** supported via the Ktor Curl websocket client backend.
+- **Windows native:** supported via the Ktor WinHttp websocket client backend.
+- **Apple native:** supported via the Ktor Darwin websocket client backend.
+- **Other targets:** may report unsupported; use `Ws.isSupported()` before relying on websocket client access.

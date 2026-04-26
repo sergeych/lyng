@@ -3245,6 +3245,21 @@ class Compiler(
                                         operand = StatementRef(s)
                                     }
 
+                                    "break" -> {
+                                        val s = parseBreakStatement(t.pos)
+                                        operand = StatementRef(s)
+                                    }
+
+                                    "continue" -> {
+                                        val s = parseContinueStatement(t.pos)
+                                        operand = StatementRef(s)
+                                    }
+
+                                    "return" -> {
+                                        val s = parseReturnStatement(t.pos)
+                                        operand = StatementRef(s)
+                                    }
+
                                     else -> {
                                         // Do not consume the keyword as part of a term; backtrack
                                         // and return null so outer parser handles it.
@@ -4784,6 +4799,28 @@ class Compiler(
         return inferTypeDeclFromRef(directRef)
     }
 
+    private fun isAbruptControlRef(ref: ObjRef): Boolean {
+        val stmt = (ref as? StatementRef)?.statement ?: return false
+        return when (unwrapBytecodeDeep(stmt)) {
+            is BreakStatement, is ContinueStatement, is ReturnStatement, is ThrowStatement -> true
+            else -> false
+        }
+    }
+
+    private fun inferElvisTypeDecl(ref: ElvisRef): TypeDecl? {
+        val leftType = inferTypeDeclFromRef(ref.left)
+            ?: inferObjClassFromRef(ref.left)?.let { TypeDecl.Simple(it.className, false) }
+        val nonNullLeftType = leftType?.let { makeTypeDeclNonNullable(it) }
+        if (isAbruptControlRef(ref.right)) return nonNullLeftType
+        val rightType = inferTypeDeclFromRef(ref.right)
+            ?: inferObjClassFromRef(ref.right)?.let { TypeDecl.Simple(it.className, false) }
+        return when {
+            nonNullLeftType == null -> rightType
+            rightType == null -> nonNullLeftType
+            else -> mergeTypeDecls(nonNullLeftType, rightType)
+        }
+    }
+
     private fun inferTypeDeclFromRef(ref: ObjRef): TypeDecl? {
         resolveReceiverTypeDecl(ref)?.let { return it }
         return when (ref) {
@@ -4792,6 +4829,7 @@ class Compiler(
             is MapLiteralRef -> inferMapLiteralTypeDecl(ref)
             is ConstRef -> inferTypeDeclFromConst(ref.constValue)
             is RangeRef -> TypeDecl.Simple("Range", false)
+            is ElvisRef -> inferElvisTypeDecl(ref)
             is CallRef -> {
                 val targetDecl = resolveReceiverTypeDecl(ref.target) ?: seedTypeDeclFromRef(ref.target)
                 val targetName = when (val target = ref.target) {
@@ -5306,6 +5344,7 @@ class Compiler(
             }
             is CallRef -> callReturnTypeDeclByRef[ref] ?: inferCallReturnTypeDecl(ref)
             is BinaryOpRef -> inferBinaryOpReturnTypeDecl(ref)
+            is ElvisRef -> inferElvisTypeDecl(ref)
             is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverTypeDecl(it.ref) }
             else -> null
         }
