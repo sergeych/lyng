@@ -92,6 +92,10 @@ Requires installing `lyngio` into the import manager from host code.
 - `import lyng.io.http` (HTTP/HTTPS client API)
 - `import lyng.io.ws` (WebSocket client API; currently supported on JVM, capability-gated elsewhere)
 - `import lyng.io.net` (TCP/UDP transport API; currently supported on JVM, capability-gated elsewhere)
+- Shared network value-type packages are also available when installed by host code:
+  - `import lyng.io.http.types` (`HttpHeaders`)
+  - `import lyng.io.ws.types` (`WsMessage`)
+  - `import lyng.io.net.types` (`IpVersion`, `SocketAddress`, `Datagram`)
 
 ## 7. AI Generation Tips
 - Assume `lyng.stdlib` APIs exist in regular script contexts.

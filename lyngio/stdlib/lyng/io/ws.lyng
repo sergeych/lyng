@@ -1,14 +1,6 @@
 package lyng.io.ws
 
-/* Received WebSocket message. */
-extern class WsMessage {
-    /* True when this message carries text payload. */
-    val isText: Bool
-    /* Text payload for text messages, otherwise null. */
-    val text: String?
-    /* Binary payload for binary messages, otherwise null. */
-    val data: Buffer?
-}
+import lyng.io.ws.types
 
 /* Active WebSocket client session. */
 extern class WsSession {

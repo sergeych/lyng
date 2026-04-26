@@ -1,17 +1,6 @@
 package lyng.io.http
 
-/*
-    Response/header view that behaves like a map for the first value of each header name.
-    Multi-valued headers are exposed through `getAll`.
-*/
-extern class HttpHeaders : Map<String, String> {
-    /* Return the first value for the given header name, or null when absent. */
-    fun get(name: String): String?
-    /* Return all values for the given header name, preserving wire order when available. */
-    fun getAll(name: String): List<String>
-    /* Return distinct header names present in this response. */
-    fun names(): List<String>
-}
+import lyng.io.http.types
 
 /* Mutable request descriptor for programmatic HTTP calls. */
 extern class HttpRequest {

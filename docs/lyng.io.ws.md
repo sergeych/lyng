@@ -3,6 +3,8 @@
 This module provides a compact WebSocket client API for Lyng scripts. It is implemented in `lyngio` and currently backed by Ktor WebSockets on the JVM.
 
 > **Note:** `lyngio` is a separate library module. It must be explicitly added as a dependency to your host application and initialized in your Lyng scopes.
+>
+> **Shared type note:** `WsMessage` is also available from `lyng.io.ws.types` when host code wants the reusable message type without depending on the WebSocket client module itself.
 
 ---
 

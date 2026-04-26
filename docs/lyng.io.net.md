@@ -4,6 +4,8 @@ This module provides minimal raw transport networking for Lyng scripts. It is im
 
 > **Note:** `lyngio` is a separate library module. It must be explicitly added as a dependency to your host application and initialized in your Lyng scopes.
 >
+> **Shared type note:** `IpVersion`, `SocketAddress`, and `Datagram` are also available from `lyng.io.net.types` when host code wants reusable transport value types without depending on the `Net` capability object itself.
+>
 > **Important native platform limit:** current native TCP/UDP support is backed by a selector with a per-process file descriptor ceiling. On Linux/macOS native targets this makes high-connection-count servers and same-process load tests unsuitable once the process approaches that limit.
 >
 > **Recommendation:** for serious HTTP/TCP servers, prefer the JVM target today. On native targets, keep concurrency bounded, batch local load tests in waves, and use multiple worker processes behind a reverse proxy if you need more throughput before the backend is reworked.

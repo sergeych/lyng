@@ -47,8 +47,10 @@ import net.sergeych.lyngio.net.security.NetAccessDeniedException
 import net.sergeych.lyngio.net.security.NetAccessOp
 import net.sergeych.lyngio.net.security.NetAccessPolicy
 import net.sergeych.lyngio.stdlib_included.netLyng
+import net.sergeych.lyngio.stdlib_included.net_typesLyng
 
 private const val NET_MODULE_NAME = "lyng.io.net"
+internal const val NET_TYPES_MODULE_NAME = "lyng.io.net.types"
 
 fun createNetModule(policy: NetAccessPolicy, scope: Scope): Boolean =
     createNetModule(policy, scope.importManager)
@@ -56,6 +58,7 @@ fun createNetModule(policy: NetAccessPolicy, scope: Scope): Boolean =
 fun createNet(policy: NetAccessPolicy, scope: Scope): Boolean = createNetModule(policy, scope)
 
 fun createNetModule(policy: NetAccessPolicy, manager: ImportManager): Boolean {
+    createNetTypesModule(manager)
     if (manager.packageNames.contains(NET_MODULE_NAME)) return false
     manager.addPackage(NET_MODULE_NAME) { module ->
         buildNetModule(module, policy)
@@ -64,6 +67,21 @@ fun createNetModule(policy: NetAccessPolicy, manager: ImportManager): Boolean {
 }
 
 fun createNet(policy: NetAccessPolicy, manager: ImportManager): Boolean = createNetModule(policy, manager)
+
+internal fun createNetTypesModule(manager: ImportManager): Boolean {
+    if (manager.packageNames.contains(NET_TYPES_MODULE_NAME)) return false
+    manager.addPackage(NET_TYPES_MODULE_NAME) { module ->
+        buildNetTypesModule(module)
+    }
+    return true
+}
+
+private suspend fun buildNetTypesModule(module: ModuleScope) {
+    module.eval(Source(NET_TYPES_MODULE_NAME, net_typesLyng))
+    val enumValues = NetEnumValues.load(module)
+    module.addConst("SocketAddress", ObjSocketAddress.type(enumValues))
+    module.addConst("Datagram", ObjDatagram.type(enumValues))
+}
 
 private suspend fun buildNetModule(module: ModuleScope, policy: NetAccessPolicy) {
     module.eval(Source(NET_MODULE_NAME, netLyng))
@@ -164,10 +182,12 @@ private class ObjSocketAddress(
     override suspend fun defaultToString(scope: Scope): ObjString = ObjString(renderAddress(address))
 
     companion object {
-        private val types = mutableMapOf<NetEnumValues, ObjClass>()
+        private data class EnumKey(val ipv4: Obj, val ipv6: Obj)
+
+        private val types = mutableMapOf<EnumKey, ObjClass>()
 
         fun type(enumValues: NetEnumValues): ObjClass =
-            types.getOrPut(enumValues) {
+            types.getOrPut(EnumKey(enumValues.ipv4, enumValues.ipv6)) {
                 object : ObjClass("SocketAddress") {
                     override suspend fun callOn(scope: Scope): Obj {
                         scope.raiseError("SocketAddress cannot be created directly")
@@ -191,10 +211,12 @@ private class ObjDatagram(
         get() = type(enumValues)
 
     companion object {
-        private val types = mutableMapOf<NetEnumValues, ObjClass>()
+        private data class EnumKey(val ipv4: Obj, val ipv6: Obj)
+
+        private val types = mutableMapOf<EnumKey, ObjClass>()
 
         fun type(enumValues: NetEnumValues): ObjClass =
-            types.getOrPut(enumValues) {
+            types.getOrPut(EnumKey(enumValues.ipv4, enumValues.ipv6)) {
                 object : ObjClass("Datagram") {
                     override suspend fun callOn(scope: Scope): Obj {
                         scope.raiseError("Datagram cannot be created directly")

@@ -37,6 +37,7 @@ import net.sergeych.lyng.raiseIllegalOperation
 import net.sergeych.lyng.requireNoArgs
 import net.sergeych.lyng.requireScope
 import net.sergeych.lyngio.stdlib_included.wsLyng
+import net.sergeych.lyngio.stdlib_included.ws_typesLyng
 import net.sergeych.lyngio.ws.LyngWsEngine
 import net.sergeych.lyngio.ws.LyngWsMessage
 import net.sergeych.lyngio.ws.LyngWsSession
@@ -46,6 +47,7 @@ import net.sergeych.lyngio.ws.security.WsAccessOp
 import net.sergeych.lyngio.ws.security.WsAccessPolicy
 
 private const val WS_MODULE_NAME = "lyng.io.ws"
+internal const val WS_TYPES_MODULE_NAME = "lyng.io.ws.types"
 
 fun createWsModule(policy: WsAccessPolicy, scope: Scope): Boolean =
     createWsModule(policy, scope.importManager)
@@ -53,6 +55,7 @@ fun createWsModule(policy: WsAccessPolicy, scope: Scope): Boolean =
 fun createWs(policy: WsAccessPolicy, scope: Scope): Boolean = createWsModule(policy, scope)
 
 fun createWsModule(policy: WsAccessPolicy, manager: ImportManager): Boolean {
+    createWsTypesModule(manager)
     if (manager.packageNames.contains(WS_MODULE_NAME)) return false
     manager.addPackage(WS_MODULE_NAME) { module ->
         buildWsModule(module, policy)
@@ -61,6 +64,19 @@ fun createWsModule(policy: WsAccessPolicy, manager: ImportManager): Boolean {
 }
 
 fun createWs(policy: WsAccessPolicy, manager: ImportManager): Boolean = createWsModule(policy, manager)
+
+internal fun createWsTypesModule(manager: ImportManager): Boolean {
+    if (manager.packageNames.contains(WS_TYPES_MODULE_NAME)) return false
+    manager.addPackage(WS_TYPES_MODULE_NAME) { module ->
+        buildWsTypesModule(module)
+    }
+    return true
+}
+
+private suspend fun buildWsTypesModule(module: ModuleScope) {
+    module.eval(Source(WS_TYPES_MODULE_NAME, ws_typesLyng))
+    module.addConst("WsMessage", ObjWsMessage.type)
+}
 
 private suspend fun buildWsModule(module: ModuleScope, policy: WsAccessPolicy) {
     module.eval(Source(WS_MODULE_NAME, wsLyng))
@@ -92,7 +108,7 @@ private suspend inline fun ScopeFacade.wsGuard(crossinline block: suspend () -> 
     }
 }
 
-private class ObjWsMessage(
+internal class ObjWsMessage(
     private val message: LyngWsMessage,
 ) : Obj() {
     override val objClass: ObjClass
@@ -112,6 +128,8 @@ private class ObjWsMessage(
                 thisAs<ObjWsMessage>().message.data?.let { ObjBuffer(it.toUByteArray()) } ?: ObjNull
             })
         }
+
+        internal fun from(message: LyngWsMessage): ObjWsMessage = ObjWsMessage(message)
     }
 }
 
@@ -152,7 +170,7 @@ private class ObjWsSession(
             addFn("receive") {
                 val self = thisAs<ObjWsSession>()
                 self.policy.require(WsAccessOp.Receive(self.targetUrl))
-                self.session.receive()?.let(::ObjWsMessage) ?: ObjNull
+                self.session.receive()?.let(ObjWsMessage::from) ?: ObjNull
             }
             addFn("close") {
                 val self = thisAs<ObjWsSession>()

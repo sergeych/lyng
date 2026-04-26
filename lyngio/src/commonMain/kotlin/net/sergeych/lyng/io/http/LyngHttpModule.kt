@@ -46,8 +46,10 @@ import net.sergeych.lyngio.http.security.HttpAccessDeniedException
 import net.sergeych.lyngio.http.security.HttpAccessOp
 import net.sergeych.lyngio.http.security.HttpAccessPolicy
 import net.sergeych.lyngio.stdlib_included.httpLyng
+import net.sergeych.lyngio.stdlib_included.http_typesLyng
 
 private const val HTTP_MODULE_NAME = "lyng.io.http"
+internal const val HTTP_TYPES_MODULE_NAME = "lyng.io.http.types"
 
 fun createHttpModule(policy: HttpAccessPolicy, scope: Scope): Boolean =
     createHttpModule(policy, scope.importManager)
@@ -55,6 +57,7 @@ fun createHttpModule(policy: HttpAccessPolicy, scope: Scope): Boolean =
 fun createHttp(policy: HttpAccessPolicy, scope: Scope): Boolean = createHttpModule(policy, scope)
 
 fun createHttpModule(policy: HttpAccessPolicy, manager: ImportManager): Boolean {
+    createHttpTypesModule(manager)
     if (manager.packageNames.contains(HTTP_MODULE_NAME)) return false
     manager.addPackage(HTTP_MODULE_NAME) { module ->
         buildHttpModule(module, policy)
@@ -63,6 +66,19 @@ fun createHttpModule(policy: HttpAccessPolicy, manager: ImportManager): Boolean 
 }
 
 fun createHttp(policy: HttpAccessPolicy, manager: ImportManager): Boolean = createHttpModule(policy, manager)
+
+internal fun createHttpTypesModule(manager: ImportManager): Boolean {
+    if (manager.packageNames.contains(HTTP_TYPES_MODULE_NAME)) return false
+    manager.addPackage(HTTP_TYPES_MODULE_NAME) { module ->
+        buildHttpTypesModule(module)
+    }
+    return true
+}
+
+private suspend fun buildHttpTypesModule(module: ModuleScope) {
+    module.eval(Source(HTTP_TYPES_MODULE_NAME, http_typesLyng))
+    module.addConst("HttpHeaders", ObjHttpHeaders.type)
+}
 
 private suspend fun buildHttpModule(module: ModuleScope, policy: HttpAccessPolicy) {
     module.eval(Source(HTTP_MODULE_NAME, httpLyng))
@@ -139,7 +155,7 @@ private suspend inline fun ScopeFacade.httpGuard(crossinline block: suspend () -
     }
 }
 
-private class ObjHttpHeaders(
+internal class ObjHttpHeaders(
     singleValueHeaders: Map<String, String> = emptyMap(),
     private val allHeaders: Map<String, List<String>> = emptyMap(),
 ) : Obj() {
@@ -201,6 +217,11 @@ private class ObjHttpHeaders(
                 ).invokeInstanceMethod(requireScope(), "iterator")
             }
         }
+
+        internal fun fromHeaders(
+            singleValueHeaders: Map<String, String>,
+            allHeaders: Map<String, List<String>>,
+        ): ObjHttpHeaders = ObjHttpHeaders(singleValueHeaders, allHeaders)
     }
 
     private fun valuesOf(name: String): List<String> = allHeaders[lookupKey(name)] ?: emptyList()

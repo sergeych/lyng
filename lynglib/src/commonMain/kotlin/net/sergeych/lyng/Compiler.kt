@@ -2959,7 +2959,11 @@ class Compiler(
                                 Token.Type.LPAREN -> {
                                     cc.next()
                                     if (shouldTreatAsClassScopeCall(left, next.value)) {
-                                        val parsed = parseArgs(null, implicitItTypeForMemberLambda(left, next.value))
+                                        val parsed = parseArgs(
+                                            null,
+                                            implicitItTypeForMemberLambda(left, next.value),
+                                            FieldRef(left, next.value, isOptional)
+                                        )
                                         val args = parsed.first
                                         val tailBlock = parsed.second
                                         isCall = true
@@ -2976,7 +2980,11 @@ class Compiler(
                                         val receiverType = if (next.value == "apply" || next.value == "run") {
                                             inferReceiverTypeFromRef(left)
                                         } else null
-                                        val parsed = parseArgs(receiverType, implicitItTypeForMemberLambda(left, next.value))
+                                        val parsed = parseArgs(
+                                            receiverType,
+                                            implicitItTypeForMemberLambda(left, next.value),
+                                            FieldRef(left, next.value, isOptional)
+                                        )
                                         val args = parsed.first
                                         val tailBlock = parsed.second
                                         if (left is LocalVarRef && left.name == "scope") {

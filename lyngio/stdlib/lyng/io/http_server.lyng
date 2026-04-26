@@ -1,0 +1,54 @@
+package lyng.io.http.server
+
+import lyng.io.http.types
+import lyng.io.ws.types
+
+/* Immutable parsed incoming server request. */
+extern class ServerRequest {
+    val method: String
+    val target: String
+    val path: String
+    val query: String?
+    val headers: HttpHeaders
+    val body: Buffer
+    fun text(): String
+    fun isWebSocketUpgrade(): Bool
+}
+
+/* Active server-side WebSocket session. */
+extern class ServerWebSocket {
+    fun isOpen(): Bool
+    fun sendText(text: String): void
+    fun sendBytes(data: Buffer): void
+    fun receive(): WsMessage?
+    fun close(code: Int = 1000, reason: String = ""): void
+}
+
+/* Mutable exchange object for one incoming request. */
+extern class ServerExchange {
+    val request: ServerRequest
+    fun respond(status: Int = 200, body: Buffer? = null): void
+    fun respondText(status: Int = 200, bodyText: String = ""): void
+    fun setHeader(name: String, value: String): void
+    fun addHeader(name: String, value: String): void
+    fun acceptWebSocket(handler: (ServerWebSocket, ServerExchange) -> Object?): void
+    fun isHandled(): Bool
+}
+
+/* Running listener handle. */
+extern class HttpServerHandle {
+    fun localPort(): Int
+    fun close(): void
+}
+
+/* Exact-path HTTP/WebSocket server with built-in router. */
+extern class HttpServer {
+    fun get(path: String, handler: (ServerExchange) -> Object?): HttpServer
+    fun post(path: String, handler: (ServerExchange) -> Object?): HttpServer
+    fun put(path: String, handler: (ServerExchange) -> Object?): HttpServer
+    fun delete(path: String, handler: (ServerExchange) -> Object?): HttpServer
+    fun any(path: String, handler: (ServerExchange) -> Object?): HttpServer
+    fun ws(path: String, handler: (ServerWebSocket, ServerExchange) -> Object?): HttpServer
+    fun fallback(handler: (ServerExchange) -> Object?): HttpServer
+    fun listen(port: Int, host: String? = null, backlog: Int = 128): HttpServerHandle
+}

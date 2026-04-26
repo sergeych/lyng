@@ -22,6 +22,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import net.sergeych.lyng.Compiler
 import net.sergeych.lyng.ExecutionError
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Script
 import net.sergeych.lyngio.fs.security.AccessContext
 import net.sergeych.lyngio.fs.security.AccessDecision
@@ -35,10 +36,24 @@ import java.net.ServerSocket
 import java.net.Socket
 import kotlin.concurrent.thread
 import kotlin.test.Test
+import kotlin.test.assertSame
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class LyngNetModuleTest {
+
+    @Test
+    fun testSharedNetTypesModuleExportsCanonicalTypes() = runBlocking {
+        val scope = Script.newScope()
+        createNetModule(PermitAllNetAccessPolicy, scope)
+
+        val netModule = scope.importManager.createModuleScope(Pos.builtIn, "lyng.io.net")
+        val typesModule = scope.importManager.createModuleScope(Pos.builtIn, "lyng.io.net.types")
+
+        assertSame(typesModule.get("IpVersion")?.value, netModule.get("IpVersion")?.value)
+        assertSame(typesModule.get("SocketAddress")?.value, netModule.get("SocketAddress")?.value)
+        assertSame(typesModule.get("Datagram")?.value, netModule.get("Datagram")?.value)
+    }
 
     @Test
     fun testResolveAndCapabilities() = runBlocking {

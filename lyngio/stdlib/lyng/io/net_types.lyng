@@ -1,0 +1,27 @@
+package lyng.io.net.types
+
+/* Address family for resolved or bound endpoints. */
+enum IpVersion {
+    IPV4,
+    IPV6
+}
+
+/* Concrete socket endpoint. */
+extern class SocketAddress {
+    /* Numeric or host-form address string. */
+    val host: String
+    /* Transport port number. */
+    val port: Int
+    /* Address family. */
+    val ipVersion: IpVersion
+    /* True when obtained from DNS resolution rather than raw bind input. */
+    val resolved: Bool
+    /* Stable printable form such as `127.0.0.1:4040` or `[::1]:4040`. */
+    override fun toString(): String
+}
+
+/* Datagram payload paired with sender/peer address. */
+extern class Datagram {
+    val data: Buffer
+    val address: SocketAddress
+}

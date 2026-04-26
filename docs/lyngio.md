@@ -19,6 +19,7 @@
 - **[lyng.io.http](lyng.io.http.md):** HTTP/HTTPS client access. Provides `Http`, `HttpRequest`, `HttpResponse`, and `HttpHeaders`.
 - **[lyng.io.ws](lyng.io.ws.md):** WebSocket client access. Provides `Ws`, `WsSession`, and `WsMessage`.
 - **[lyng.io.net](lyng.io.net.md):** Transport networking. Provides `Net`, `TcpSocket`, `TcpServer`, `UdpSocket`, and `SocketAddress`.
+- **Shared networking type packages:** `lyng.io.http.types`, `lyng.io.ws.types`, and `lyng.io.net.types` expose reusable value types such as `HttpHeaders`, `WsMessage`, `IpVersion`, `SocketAddress`, and `Datagram` when host code wants type-only imports without installing the corresponding capability object module.
 
 ---
 

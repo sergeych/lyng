@@ -3,6 +3,8 @@
 This module provides a compact HTTP client API for Lyng scripts. It is implemented in `lyngio` and backed by Ktor on supported runtimes.
 
 > **Note:** `lyngio` is a separate library module. It must be explicitly added as a dependency to your host application and initialized in your Lyng scopes.
+>
+> **Shared type note:** `HttpHeaders` is also available from `lyng.io.http.types` when host code wants the reusable value type without relying on the HTTP client module itself.
 
 ---
 
