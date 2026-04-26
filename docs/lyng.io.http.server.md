@@ -37,90 +37,75 @@ suspend fun bootstrapHttpServer() {
 
 ---
 
-#### Basic exact route
+#### RequestContext Sugar
+
+Route handlers use `RequestContext` as the receiver, so inside handlers you normally write direct calls such as:
+
+- `jsonBody<T>()`
+- `respondJson(...)`
+- `respondText(...)`
+- `setHeader(...)`
+- `request.path`
+- `routeParams["id"]`
+
+This keeps ordinary HTTP endpoints compact and avoids passing an explicit request/exchange parameter through every route lambda.
+
+---
+
+#### JSON API Sugar
+
+For ordinary JSON APIs, `RequestContext` includes two primary helpers:
+
+- `jsonBody<T>()` decodes the request body with typed `Json.decodeAs(...)`
+- `respondJson(body, status = 200)` sets JSON content type and responds with plain `toJsonString()`
+
+These helpers intentionally use ordinary JSON projection for HTTP interop, not canonical `Json.encode(...)`.
+
+**Typed JSON POST**
+
+```lyng
+import lyng.io.http.server
+
+closed class CreateUserRequest(name: String, age: Int)
+closed class CreateUserResponse(id: Int, name: String, age: Int)
+
+val server = HttpServer()
+
+server.postPath("/api/users") {
+    val req = jsonBody<CreateUserRequest>()
+
+    if (req.name.isBlank()) {
+        respondJson({ error: "name must not be empty" }, 400)
+        return
+    }
+
+    respondJson(CreateUserResponse(101, req.name, req.age), 201)
+}
+
+server.listen(8080, "127.0.0.1")
+```
+
+**JSON response with route params**
 
 ```lyng
 import lyng.io.http.server
 
 val server = HttpServer()
-server.get("/hello") {
-    setHeader("Content-Type", "text/plain")
-    respondText(200, "hello")
+
+server.getPath("/api/users/{id}") {
+    respondJson({
+        id: routeParams["id"],
+        path: request.path,
+        ok: true
+    })
 }
+
 server.listen(8080, "127.0.0.1")
 ```
 
 ---
 
-#### Reusable routers
-
-`Router` collects the same route kinds as `HttpServer`, but does not listen on sockets by itself.  
-Mount it into `HttpServer` or another `Router`.
-
-```lyng
-import lyng.io.http.server
-
-val api = Router()
-api.get("/health") {
-    respondText(200, "ok")
-}
-
-val users = Router()
-users.getPath("/users/{id}") {
-    respondJson({ id: routeParams["id"] })
-}
-
-api.mount(users)
-
-val server = HttpServer()
-server.mount(api)
-server.listen(8080, "127.0.0.1")
-```
-
-Mounted routers reuse the built-in server router. They are configuration-time composition, not an extra per-request Lyng dispatch layer.
-
----
-
-#### Regex route
-
-Regex routes match the whole request path, not a substring.
-
-```lyng
-server.get("^/users/([0-9]+)/posts/([0-9]+)$".re) {
-    val m = routeMatch!!
-    respondText(200, "user=" + m[1] + ", post=" + m[2])
-}
-```
-
----
-
-#### Path-template route
-
-Path templates are sugar on top of regex routes. Template parameters are exposed as decoded `routeParams`.
-
-```lyng
-server.getPath("/users/{userId}/posts/{postId}") {
-    respondText(
-        200,
-        routeParams["userId"] + ":" + routeParams["postId"]
-    )
-}
-```
-
-Template rules:
-
-- template must start with `/`
-- a segment is either literal text or `{name}`
-- parameter names must be valid identifiers
-- parameter values match one path segment only
-- parameter values use path decoding rules:
-  - valid percent-encoding is decoded
-  - `+` stays `+`
-  - malformed `%` stays literal
-
----
-
-#### Request and exchange data
+#### Request and Route Data
 
 `ServerRequest` exposes parsed HTTP request data:
 
@@ -152,56 +137,36 @@ For path-template routes, both `routeMatch` and `routeParams` are set.
 
 ---
 
-#### JSON request/response helpers
+#### Reusable Routers
 
-For ordinary HTTP JSON APIs, `RequestContext` includes two helpers:
-
-- `jsonBody<T>()` decodes the request body with typed `Json.decodeAs(...)`
-- `respondJson(body, status = 200)` sets JSON content type and responds with plain `toJsonString()`
-
-Example:
+`Router` collects the same route kinds as `HttpServer`, but does not listen on sockets by itself.  
+Mount it into `HttpServer` or another `Router`.
 
 ```lyng
 import lyng.io.http.server
 
-closed class CreateUserRequest(name: String, age: Int)
-closed class CreateUserResponse(id: Int, name: String, age: Int)
-
-val server = HttpServer()
-
-server.postPath("/api/users") {
-    val req = jsonBody<CreateUserRequest>()
-
-    if (req.name.isBlank()) {
-        respondJson({ error: "name must not be empty" }, 400)
-        return
-    }
-
-    respondJson(CreateUserResponse(101, req.name, req.age), 201)
+val api = Router()
+api.get("/health") {
+    respondText(200, "ok")
 }
 
+val users = Router()
+users.getPath("/users/{id}") {
+    respondJson({ id: routeParams["id"] })
+}
+
+api.mount(users)
+
+val server = HttpServer()
+server.mount(api)
 server.listen(8080, "127.0.0.1")
 ```
 
-These helpers intentionally use ordinary JSON projection for HTTP interop, not canonical `Json.encode(...)`.
+Mounted routers reuse the built-in server router. They are configuration-time composition, not an extra per-request Lyng dispatch layer.
 
 ---
 
-#### Route precedence
-
-Dispatch order is:
-
-1. exact method route
-2. exact `any` route
-3. regex method route, registration order
-4. regex `any` route, registration order
-5. fallback
-
-This means exact routes stay fast and always win over template or regex routes for the same path.
-
----
-
-#### WebSocket routes
+#### WebSocket Routes
 
 You can route websocket upgrades by exact path, regex, or path template:
 
@@ -219,7 +184,75 @@ server.wsPath("/ws/{room}") { ws ->
 
 ---
 
-#### API surface
+#### Path-Template Routes
+
+Path templates are sugar on top of regex routes. Template parameters are exposed as decoded `routeParams`.
+
+```lyng
+server.getPath("/users/{userId}/posts/{postId}") {
+    respondText(
+        200,
+        routeParams["userId"] + ":" + routeParams["postId"]
+    )
+}
+```
+
+Template rules:
+
+- template must start with `/`
+- a segment is either literal text or `{name}`
+- parameter names must be valid identifiers
+- parameter values match one path segment only
+- parameter values use path decoding rules:
+  - valid percent-encoding is decoded
+  - `+` stays `+`
+  - malformed `%` stays literal
+
+---
+
+#### Regex Routes
+
+Regex routes match the whole request path, not a substring.
+
+```lyng
+server.get("^/users/([0-9]+)/posts/([0-9]+)$".re) {
+    val m = routeMatch!!
+    respondText(200, "user=" + m[1] + ", post=" + m[2])
+}
+```
+
+---
+
+#### Basic Exact Route
+
+```lyng
+import lyng.io.http.server
+
+val server = HttpServer()
+server.get("/hello") {
+    setHeader("Content-Type", "text/plain")
+    respondText(200, "hello")
+}
+server.listen(8080, "127.0.0.1")
+```
+
+---
+
+#### Route Precedence
+
+Dispatch order is:
+
+1. exact method route
+2. exact `any` route
+3. regex method route, registration order
+4. regex `any` route, registration order
+5. fallback
+
+This means exact routes stay fast and always win over template or regex routes for the same path.
+
+---
+
+#### API Surface
 
 `Router` route registration methods:
 
