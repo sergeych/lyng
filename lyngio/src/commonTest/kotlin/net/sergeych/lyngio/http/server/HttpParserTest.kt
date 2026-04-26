@@ -71,6 +71,39 @@ class HttpParserTest {
         assertEquals("ping", request.body.decodeToString())
     }
 
+    @Test
+    fun queryStringAndDecodedQueryMapAreExposed() = kotlinx.coroutines.test.runTest {
+        val request = parse(
+            "GET /echo?a=1&b=hello+world&b=last&utf=%D1%82%D0%B5%D1%81%D1%82&bad=%GG%2&flag HTTP/1.1\r\n" +
+                "Host: localhost\r\n\r\n"
+        )
+        assertEquals("a=1&b=hello+world&b=last&utf=%D1%82%D0%B5%D1%81%D1%82&bad=%GG%2&flag", request.head.queryString)
+        assertEquals("1", request.head.query["a"])
+        assertEquals("last", request.head.query["b"])
+        assertEquals("тест", request.head.query["utf"])
+        assertEquals("%GG%2", request.head.query["bad"])
+        assertEquals("", request.head.query["flag"])
+    }
+
+    @Test
+    fun missingQueryProducesEmptyMap() = kotlinx.coroutines.test.runTest {
+        val request = parse(
+            "GET /echo HTTP/1.1\r\n" +
+                "Host: localhost\r\n\r\n"
+        )
+        assertEquals(null, request.head.queryString)
+        assertEquals(emptyMap(), request.head.query)
+    }
+
+    @Test
+    fun pathPartsAreLazyDecodedWithoutPlusTranslation() = kotlinx.coroutines.test.runTest {
+        val request = parse(
+            "GET /one/two%20words/a+b/%GG/%D1%82%D0%B5%D1%81%D1%82 HTTP/1.1\r\n" +
+                "Host: localhost\r\n\r\n"
+        )
+        assertEquals(listOf("one", "two words", "a+b", "%GG", "тест"), request.head.pathParts)
+    }
+
     private suspend fun parse(
         rawRequest: String,
         config: HttpServerConfig = HttpServerConfig(),

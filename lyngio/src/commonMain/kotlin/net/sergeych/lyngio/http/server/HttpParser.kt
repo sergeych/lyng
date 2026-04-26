@@ -33,7 +33,7 @@ internal suspend fun parseHttpRequest(
             method = requestHead.method,
             target = requestHead.target,
             path = requestHead.path,
-            query = requestHead.query,
+            queryString = requestHead.queryString,
             version = requestHead.version,
             headers = headers,
             contentLength = contentLength,
@@ -48,7 +48,7 @@ private data class ParsedRequestLine(
     val method: String,
     val target: String,
     val path: String,
-    val query: String?,
+    val queryString: String?,
     val version: String,
 )
 
@@ -75,8 +75,8 @@ private fun parseRequestLine(line: String, config: HttpServerConfig): ParsedRequ
     }
     val queryAt = target.indexOf('?')
     val path = if (queryAt >= 0) target.substring(0, queryAt) else target
-    val query = if (queryAt >= 0) target.substring(queryAt + 1) else null
-    return ParsedRequestLine(method = method, target = target, path = path, query = query, version = version)
+    val queryString = if (queryAt >= 0) target.substring(queryAt + 1) else null
+    return ParsedRequestLine(method = method, target = target, path = path, queryString = queryString, version = version)
 }
 
 private suspend fun parseHeaders(

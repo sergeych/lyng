@@ -1,5 +1,6 @@
 package net.sergeych.lyng.io.http.server
 
+import kotlinx.serialization.json.Json
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.ScopeFacade
@@ -14,9 +15,13 @@ import net.sergeych.lyng.obj.ObjClass
 import net.sergeych.lyng.obj.ObjExternCallable
 import net.sergeych.lyng.obj.ObjInt
 import net.sergeych.lyng.obj.ObjList
+import net.sergeych.lyng.obj.ObjMap
 import net.sergeych.lyng.obj.ObjNull
 import net.sergeych.lyng.obj.ObjProperty
+import net.sergeych.lyng.obj.ObjRegex
+import net.sergeych.lyng.obj.ObjRegexMatch
 import net.sergeych.lyng.obj.ObjString
+import net.sergeych.lyng.obj.ObjTypeExpr
 import net.sergeych.lyng.obj.ObjVoid
 import net.sergeych.lyng.obj.requiredArg
 import net.sergeych.lyng.obj.thisAs
@@ -24,6 +29,7 @@ import net.sergeych.lyng.io.http.ObjHttpHeaders
 import net.sergeych.lyng.io.http.createHttpTypesModule
 import net.sergeych.lyng.io.ws.ObjWsMessage
 import net.sergeych.lyng.io.ws.createWsTypesModule
+import net.sergeych.lyng.serialization.ObjJsonClass
 import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.raiseIllegalOperation
 import net.sergeych.lyng.requireNoArgs
@@ -34,6 +40,7 @@ import net.sergeych.lyngio.http.server.HttpRequest
 import net.sergeych.lyngio.http.server.HttpResponse
 import net.sergeych.lyngio.http.server.HttpServerConfig
 import net.sergeych.lyngio.http.server.HttpWebSocketSession
+import net.sergeych.lyngio.http.server.decodePathSegment
 import net.sergeych.lyngio.http.server.defaultReason
 import net.sergeych.lyngio.http.server.startHttpServer
 import net.sergeych.lyngio.net.security.NetAccessDeniedException
@@ -63,13 +70,14 @@ fun createHttpServer(policy: NetAccessPolicy, manager: ImportManager): Boolean =
 
 private suspend fun buildHttpServerModule(module: ModuleScope, policy: NetAccessPolicy) {
     module.eval(Source(HTTP_SERVER_MODULE_NAME, http_serverLyng))
+    val serverExchangeClass = ObjServerExchange.type(module.requireClass("ServerExchange"))
     module.addConst("HttpHeaders", ObjHttpHeaders.type)
     module.addConst("WsMessage", ObjWsMessage.type)
     module.addConst("ServerRequest", ObjServerRequest.type)
-    module.addConst("ServerExchange", ObjServerExchange.type)
+    module.addConst("ServerExchange", serverExchangeClass)
     module.addConst("ServerWebSocket", ObjServerWebSocket.type)
     module.addConst("HttpServerHandle", ObjHttpServerHandle.type)
-    module.addConst("HttpServer", ObjLyngHttpServer.type(policy))
+    module.addConst("HttpServer", ObjLyngHttpServer.type(policy, serverExchangeClass))
 }
 
 private suspend inline fun ScopeFacade.httpServerGuard(crossinline block: suspend () -> Obj): Obj {
@@ -102,6 +110,8 @@ private val boolType = TypeDecl.Simple("Bool", false)
 private val intType = TypeDecl.Simple("Int", false)
 private val bufferType = TypeDecl.Simple("Buffer", false)
 private val nullableBufferType = TypeDecl.Simple("Buffer", true)
+private val regexType = TypeDecl.Simple("Regex", false)
+private val nullableRegexMatchType = TypeDecl.Simple("RegexMatch", true)
 private val voidType = TypeDecl.Simple("Void", false)
 private val httpHeadersType = TypeDecl.Simple("HttpHeaders", false)
 private val serverRequestType = TypeDecl.Simple("ServerRequest", false)
@@ -113,6 +123,8 @@ private val httpServerType = TypeDecl.Simple("HttpServer", false)
 private val nullableAnyType = TypeDecl.TypeNullableAny
 
 private fun listType(item: TypeDecl) = TypeDecl.Generic("List", listOf(item), false)
+private fun mapType(key: TypeDecl, value: TypeDecl) = TypeDecl.Generic("Map", listOf(key, value), false)
+private fun unionType(vararg options: TypeDecl) = TypeDecl.Union(options.toList(), nullable = false)
 
 private fun fnType(returnType: TypeDecl, vararg params: TypeDecl) =
     TypeDecl.Function(receiver = null, params = params.toList(), returnType = returnType)
@@ -147,47 +159,70 @@ private fun bridgeProperty(
 
 private class ObjLyngHttpServer(
     private val netPolicy: NetAccessPolicy,
+    private val exchangeClass: ObjClass,
 ) : Obj() {
     private val methodRoutes = linkedMapOf<String, LinkedHashMap<String, RegisteredCallable>>()
+    private val methodRegexRoutes = linkedMapOf<String, MutableList<RegisteredRegexRoute>>()
     private val anyRoutes = linkedMapOf<String, RegisteredCallable>()
+    private val anyRegexRoutes = mutableListOf<RegisteredRegexRoute>()
     private val wsRoutes = linkedMapOf<String, RegisteredCallable>()
+    private val wsRegexRoutes = mutableListOf<RegisteredRegexRoute>()
     private var fallback: RegisteredCallable? = null
     private var handle: net.sergeych.lyngio.http.server.HttpServer? = null
 
     override val objClass: ObjClass
-        get() = type(netPolicy)
+        get() = type(netPolicy, exchangeClass)
 
     companion object {
-        private val types = mutableMapOf<NetAccessPolicy, ObjClass>()
+        private val types = mutableMapOf<Pair<NetAccessPolicy, ObjClass>, ObjClass>()
 
-        fun type(netPolicy: NetAccessPolicy): ObjClass =
-            types.getOrPut(netPolicy) {
+        fun type(netPolicy: NetAccessPolicy, exchangeClass: ObjClass): ObjClass =
+            types.getOrPut(netPolicy to exchangeClass) {
                 object : ObjClass("HttpServer") {
                     override suspend fun callOn(scope: Scope): Obj {
                         if (scope.args.list.isNotEmpty()) scope.raiseError("HttpServer() does not accept arguments")
-                        return ObjLyngHttpServer(netPolicy)
+                        return ObjLyngHttpServer(netPolicy, exchangeClass)
                     }
                 }.apply {
+                    val routeArgType = unionType(stringType, regexType)
                     val exchangeHandlerType = fnType(nullableAnyType, serverExchangeType)
                     val webSocketHandlerType = fnType(nullableAnyType, serverWebSocketType, serverExchangeType)
 
-                    bridgeFn(this, "get", fnType(httpServerType, stringType, exchangeHandlerType)) {
+                    bridgeFn(this, "get", fnType(httpServerType, routeArgType, exchangeHandlerType)) {
                         thisAs<ObjLyngHttpServer>().registerRoute("GET", this)
                     }
-                    bridgeFn(this, "post", fnType(httpServerType, stringType, exchangeHandlerType)) {
+                    bridgeFn(this, "getPath", fnType(httpServerType, stringType, exchangeHandlerType)) {
+                        thisAs<ObjLyngHttpServer>().registerTemplateRoute("GET", this)
+                    }
+                    bridgeFn(this, "post", fnType(httpServerType, routeArgType, exchangeHandlerType)) {
                         thisAs<ObjLyngHttpServer>().registerRoute("POST", this)
                     }
-                    bridgeFn(this, "put", fnType(httpServerType, stringType, exchangeHandlerType)) {
+                    bridgeFn(this, "postPath", fnType(httpServerType, stringType, exchangeHandlerType)) {
+                        thisAs<ObjLyngHttpServer>().registerTemplateRoute("POST", this)
+                    }
+                    bridgeFn(this, "put", fnType(httpServerType, routeArgType, exchangeHandlerType)) {
                         thisAs<ObjLyngHttpServer>().registerRoute("PUT", this)
                     }
-                    bridgeFn(this, "delete", fnType(httpServerType, stringType, exchangeHandlerType)) {
+                    bridgeFn(this, "putPath", fnType(httpServerType, stringType, exchangeHandlerType)) {
+                        thisAs<ObjLyngHttpServer>().registerTemplateRoute("PUT", this)
+                    }
+                    bridgeFn(this, "delete", fnType(httpServerType, routeArgType, exchangeHandlerType)) {
                         thisAs<ObjLyngHttpServer>().registerRoute("DELETE", this)
                     }
-                    bridgeFn(this, "any", fnType(httpServerType, stringType, exchangeHandlerType)) {
+                    bridgeFn(this, "deletePath", fnType(httpServerType, stringType, exchangeHandlerType)) {
+                        thisAs<ObjLyngHttpServer>().registerTemplateRoute("DELETE", this)
+                    }
+                    bridgeFn(this, "any", fnType(httpServerType, routeArgType, exchangeHandlerType)) {
                         thisAs<ObjLyngHttpServer>().registerAny(this)
                     }
-                    bridgeFn(this, "ws", fnType(httpServerType, stringType, webSocketHandlerType)) {
+                    bridgeFn(this, "anyPath", fnType(httpServerType, stringType, exchangeHandlerType)) {
+                        thisAs<ObjLyngHttpServer>().registerTemplateAny(this)
+                    }
+                    bridgeFn(this, "ws", fnType(httpServerType, routeArgType, webSocketHandlerType)) {
                         thisAs<ObjLyngHttpServer>().registerWs(this)
+                    }
+                    bridgeFn(this, "wsPath", fnType(httpServerType, stringType, webSocketHandlerType)) {
+                        thisAs<ObjLyngHttpServer>().registerTemplateWs(this)
                     }
                     bridgeFn(this, "fallback", fnType(httpServerType, exchangeHandlerType)) {
                         thisAs<ObjLyngHttpServer>().registerFallback(this)
@@ -203,37 +238,108 @@ private class ObjLyngHttpServer(
         if (handle != null) scope.raiseIllegalState("HttpServer routes cannot be modified after listen()")
     }
 
-    private fun requirePath(scope: ScopeFacade, index: Int): String {
-        val path = scope.requiredArg<ObjString>(index).value
-        if (!path.startsWith('/')) scope.raiseIllegalArgument("path must start with '/'")
-        return path
+    private fun requireRoutePattern(scope: ScopeFacade, index: Int): RoutePattern = when (val path = scope.args.list.getOrNull(index)) {
+        is ObjString -> {
+            if (!path.value.startsWith('/')) scope.raiseIllegalArgument("path must start with '/'")
+            RoutePattern.Exact(path.value)
+        }
+        is ObjRegex -> RoutePattern.Regex(path)
+        else -> scope.raiseClassCastError("path must be String or Regex")
     }
 
     private suspend fun registerRoute(method: String, scope: ScopeFacade): Obj = scope.httpServerGuard {
         ensureMutable(scope)
-        val path = requirePath(scope, 0)
+        val path = requireRoutePattern(scope, 0)
         val handler = captureCallable(scope.requireScope(), scope.args.list[1])
-        val routes = methodRoutes.getOrPut(method) { linkedMapOf() }
-        if (routes.containsKey(path)) scope.raiseIllegalArgument("duplicate route for $method $path")
-        routes[path] = handler
+        when (path) {
+            is RoutePattern.Exact -> {
+                val routes = methodRoutes.getOrPut(method) { linkedMapOf() }
+                if (routes.containsKey(path.path)) scope.raiseIllegalArgument("duplicate route for $method ${path.path}")
+                routes[path.path] = handler
+            }
+            is RoutePattern.Regex -> {
+                val routes = methodRegexRoutes.getOrPut(method) { mutableListOf() }
+                if (routes.any { it.pattern.regex.pattern == path.regex.regex.pattern }) {
+                    scope.raiseIllegalArgument("duplicate regex route for $method ${path.regex.regex.pattern}")
+                }
+                routes += RegisteredRegexRoute(path.regex, handler)
+            }
+        }
+        scope.thisObj
+    }
+
+    private suspend fun registerTemplateRoute(method: String, scope: ScopeFacade): Obj = scope.httpServerGuard {
+        ensureMutable(scope)
+        val template = requirePathTemplate(scope, 0)
+        val handler = captureCallable(scope.requireScope(), scope.args.list[1])
+        val routes = methodRegexRoutes.getOrPut(method) { mutableListOf() }
+        val compiled = compilePathTemplate(template, scope)
+        if (routes.any { it.identity == compiled.identity }) {
+            scope.raiseIllegalArgument("duplicate path route for $method $template")
+        }
+        routes += RegisteredRegexRoute(compiled.pattern, handler, compiled.paramNames, compiled.identity)
         scope.thisObj
     }
 
     private suspend fun registerAny(scope: ScopeFacade): Obj = scope.httpServerGuard {
         ensureMutable(scope)
-        val path = requirePath(scope, 0)
+        val path = requireRoutePattern(scope, 0)
         val handler = captureCallable(scope.requireScope(), scope.args.list[1])
-        if (anyRoutes.containsKey(path)) scope.raiseIllegalArgument("duplicate route for ANY $path")
-        anyRoutes[path] = handler
+        when (path) {
+            is RoutePattern.Exact -> {
+                if (anyRoutes.containsKey(path.path)) scope.raiseIllegalArgument("duplicate route for ANY ${path.path}")
+                anyRoutes[path.path] = handler
+            }
+            is RoutePattern.Regex -> {
+                if (anyRegexRoutes.any { it.pattern.regex.pattern == path.regex.regex.pattern }) {
+                    scope.raiseIllegalArgument("duplicate regex route for ANY ${path.regex.regex.pattern}")
+                }
+                anyRegexRoutes += RegisteredRegexRoute(path.regex, handler)
+            }
+        }
+        scope.thisObj
+    }
+
+    private suspend fun registerTemplateAny(scope: ScopeFacade): Obj = scope.httpServerGuard {
+        ensureMutable(scope)
+        val template = requirePathTemplate(scope, 0)
+        val handler = captureCallable(scope.requireScope(), scope.args.list[1])
+        val compiled = compilePathTemplate(template, scope)
+        if (anyRegexRoutes.any { it.identity == compiled.identity }) {
+            scope.raiseIllegalArgument("duplicate path route for ANY $template")
+        }
+        anyRegexRoutes += RegisteredRegexRoute(compiled.pattern, handler, compiled.paramNames, compiled.identity)
         scope.thisObj
     }
 
     private suspend fun registerWs(scope: ScopeFacade): Obj = scope.httpServerGuard {
         ensureMutable(scope)
-        val path = requirePath(scope, 0)
+        val path = requireRoutePattern(scope, 0)
         val handler = captureCallable(scope.requireScope(), scope.args.list[1])
-        if (wsRoutes.containsKey(path)) scope.raiseIllegalArgument("duplicate websocket route for $path")
-        wsRoutes[path] = handler
+        when (path) {
+            is RoutePattern.Exact -> {
+                if (wsRoutes.containsKey(path.path)) scope.raiseIllegalArgument("duplicate websocket route for ${path.path}")
+                wsRoutes[path.path] = handler
+            }
+            is RoutePattern.Regex -> {
+                if (wsRegexRoutes.any { it.pattern.regex.pattern == path.regex.regex.pattern }) {
+                    scope.raiseIllegalArgument("duplicate websocket regex route for ${path.regex.regex.pattern}")
+                }
+                wsRegexRoutes += RegisteredRegexRoute(path.regex, handler)
+            }
+        }
+        scope.thisObj
+    }
+
+    private suspend fun registerTemplateWs(scope: ScopeFacade): Obj = scope.httpServerGuard {
+        ensureMutable(scope)
+        val template = requirePathTemplate(scope, 0)
+        val handler = captureCallable(scope.requireScope(), scope.args.list[1])
+        val compiled = compilePathTemplate(template, scope)
+        if (wsRegexRoutes.any { it.identity == compiled.identity }) {
+            scope.raiseIllegalArgument("duplicate websocket path route for $template")
+        }
+        wsRegexRoutes += RegisteredRegexRoute(compiled.pattern, handler, compiled.paramNames, compiled.identity)
         scope.thisObj
     }
 
@@ -241,6 +347,12 @@ private class ObjLyngHttpServer(
         ensureMutable(scope)
         fallback = captureCallable(scope.requireScope(), scope.args.list[0])
         scope.thisObj
+    }
+
+    private fun requirePathTemplate(scope: ScopeFacade, index: Int): String {
+        val template = scope.requiredArg<ObjString>(index).value
+        if (!template.startsWith('/')) scope.raiseIllegalArgument("pathTemplate must start with '/'")
+        return template
     }
 
     private suspend fun listen(scope: ScopeFacade): Obj = scope.httpServerGuard {
@@ -263,37 +375,140 @@ private class ObjLyngHttpServer(
     private suspend fun dispatchRequest(request: HttpRequest): HttpHandlerResult {
         val path = request.head.path
         if (request.head.wantsWebSocketUpgrade) {
-            wsRoutes[path]?.let { route ->
+                    wsRoutes[path]?.let { route ->
                 return HttpHandlerResult.WebSocket { session ->
-                    val exchange = ObjServerExchange(request)
+                    val exchange = ObjServerExchange(request, null, emptyMap(), exchangeClass)
                     route.call(ObjServerWebSocket(session), exchange)
+                }
+            }
+            matchRegexRoute(wsRegexRoutes, path)?.let { matched ->
+                return HttpHandlerResult.WebSocket { session ->
+                    val exchange = ObjServerExchange(request, ObjRegexMatch(matched.match), matched.params, exchangeClass)
+                    matched.handler.call(ObjServerWebSocket(session), exchange)
                 }
             }
         }
 
-        val route = methodRoutes[request.head.method.uppercase()]?.get(path)
-            ?: anyRoutes[path]
-            ?: fallback
-
-        if (route == null) {
-            return HttpHandlerResult.Response(HttpResponse(status = 404, body = "not found".encodeToByteArray()))
+        val method = request.head.method.uppercase()
+        val exactRoute = methodRoutes[method]?.get(path) ?: anyRoutes[path]
+        if (exactRoute != null) {
+            val exchange = ObjServerExchange(request, null, emptyMap(), exchangeClass)
+            exactRoute.call(exchange)
+            return exchangeResult(exactRoute === fallback, exchange)
         }
 
-        val exchange = ObjServerExchange(request)
-        route.call(exchange)
-        return when (val result = exchange.result) {
-            is ExchangeResult.Http -> result.value
-            is ExchangeResult.WebSocket -> result.value
-            ExchangeResult.Unhandled -> {
-                if (route === fallback) {
-                    HttpHandlerResult.Response(HttpResponse(status = 404, body = "not found".encodeToByteArray()))
-                } else {
-                    HttpHandlerResult.Response(HttpResponse(status = 500, body = "route handler did not handle exchange".encodeToByteArray(), close = true))
-                }
+        matchRegexRoute(methodRegexRoutes[method], path)?.let { matched ->
+            val exchange = ObjServerExchange(request, ObjRegexMatch(matched.match), matched.params, exchangeClass)
+            matched.handler.call(exchange)
+            return exchangeResult(false, exchange)
+        }
+
+        matchRegexRoute(anyRegexRoutes, path)?.let { matched ->
+            val exchange = ObjServerExchange(request, ObjRegexMatch(matched.match), matched.params, exchangeClass)
+            matched.handler.call(exchange)
+            return exchangeResult(false, exchange)
+        }
+
+        val fallbackRoute = fallback ?: return HttpHandlerResult.Response(
+            HttpResponse(status = 404, body = "not found".encodeToByteArray())
+        )
+        val exchange = ObjServerExchange(request, null, emptyMap(), exchangeClass)
+        fallbackRoute.call(exchange)
+        return exchangeResult(true, exchange)
+    }
+
+    private fun exchangeResult(isFallback: Boolean, exchange: ObjServerExchange): HttpHandlerResult = when (val result = exchange.result) {
+        is ExchangeResult.Http -> result.value
+        is ExchangeResult.WebSocket -> result.value
+        ExchangeResult.Unhandled -> {
+            if (isFallback) {
+                HttpHandlerResult.Response(HttpResponse(status = 404, body = "not found".encodeToByteArray()))
+            } else {
+                HttpHandlerResult.Response(HttpResponse(status = 500, body = "route handler did not handle exchange".encodeToByteArray(), close = true))
             }
         }
     }
 }
+
+private sealed interface RoutePattern {
+    data class Exact(val path: String) : RoutePattern
+    data class Regex(val regex: ObjRegex) : RoutePattern
+}
+
+private data class RegisteredRegexRoute(
+    val pattern: ObjRegex,
+    val handler: RegisteredCallable,
+    val paramNames: List<String> = emptyList(),
+    val identity: String = "re:${pattern.regex.pattern}",
+)
+
+private data class MatchedRegexRoute(
+    val handler: RegisteredCallable,
+    val match: MatchResult,
+    val params: Map<String, String>,
+)
+
+private fun matchRegexRoute(routes: List<RegisteredRegexRoute>?, path: String): MatchedRegexRoute? {
+    if (routes == null) return null
+    for (route in routes) {
+        val match = route.pattern.regex.matchEntire(path) ?: continue
+        val params = if (route.paramNames.isEmpty()) {
+            emptyMap()
+        } else {
+            route.paramNames.withIndex().associateTo(linkedMapOf()) { (index, name) ->
+                name to decodePathSegment(match.groupValues[index + 1])
+            }
+        }
+        return MatchedRegexRoute(route.handler, match, params)
+    }
+    return null
+}
+
+private data class CompiledPathTemplate(
+    val pattern: ObjRegex,
+    val paramNames: List<String>,
+    val identity: String,
+)
+
+private fun compilePathTemplate(template: String, scope: ScopeFacade): CompiledPathTemplate {
+    val segments = if (template == "/") emptyList() else template.removePrefix("/").split('/')
+    val names = mutableListOf<String>()
+    val pattern = buildString {
+        append('^')
+        if (segments.isEmpty()) {
+            append('/')
+        } else {
+            for (segment in segments) {
+                append('/')
+                if (segment.startsWith('{') && segment.endsWith('}')) {
+                    val name = segment.substring(1, segment.length - 1)
+                    if (!isValidPathParamName(name)) {
+                        scope.raiseIllegalArgument("invalid path parameter name: $name")
+                    }
+                    if (!names.add(name)) {
+                        scope.raiseIllegalArgument("duplicate path parameter name: $name")
+                    }
+                    append("([^/]+)")
+                } else if ('{' in segment || '}' in segment) {
+                    scope.raiseIllegalArgument("path template segments must be literal text or {name}")
+                } else {
+                    append(Regex.escape(segment))
+                }
+            }
+        }
+        append('$')
+    }
+    return CompiledPathTemplate(
+        pattern = ObjRegex(Regex(pattern)),
+        paramNames = names,
+        identity = "path:$template"
+    )
+}
+
+private fun isValidPathParamName(name: String): Boolean =
+    name.isNotEmpty() &&
+        (name.first() == '_' || name.first().isLetter()) &&
+        name.drop(1).all { it == '_' || it.isLetterOrDigit() }
 
 private class ObjHttpServerHandle(
     private val handle: net.sergeych.lyngio.http.server.HttpServer,
@@ -340,8 +555,14 @@ private class ObjServerRequest(
             bridgeProperty(this, "path", stringType) {
                 ObjString(thisAs<ObjServerRequest>().request.head.path)
             }
-            bridgeProperty(this, "query", nullableStringType) {
-                thisAs<ObjServerRequest>().request.head.query?.let(::ObjString) ?: ObjNull
+            bridgeProperty(this, "pathParts", listType(stringType)) {
+                ObjList(thisAs<ObjServerRequest>().request.head.pathParts.map(::ObjString).toMutableList())
+            }
+            bridgeProperty(this, "queryString", nullableStringType) {
+                thisAs<ObjServerRequest>().request.head.queryString?.let(::ObjString) ?: ObjNull
+            }
+            bridgeProperty(this, "query", mapType(stringType, stringType)) {
+                thisAs<ObjServerRequest>().request.head.query.toObjMap()
             }
             bridgeProperty(this, "headers", httpHeadersType) {
                 requestHeadersObj(thisAs<ObjServerRequest>().request.head.headers)
@@ -367,6 +588,9 @@ private sealed interface ExchangeResult {
 
 private class ObjServerExchange(
     private val request: HttpRequest,
+    private val routeMatch: ObjRegexMatch?,
+    private val routeParams: Map<String, String>,
+    private val type: ObjClass,
 ) : Obj() {
     private val responseHeaders = linkedMapOf<String, MutableList<String>>()
     var result: ExchangeResult = ExchangeResult.Unhandled
@@ -376,63 +600,100 @@ private class ObjServerExchange(
         get() = type
 
     companion object {
-        val type = object : ObjClass("ServerExchange") {
-            override suspend fun callOn(scope: Scope): Obj {
-                scope.raiseError("ServerExchange cannot be created directly")
-            }
-        }.apply {
-            bridgeProperty(this, "request", serverRequestType) {
-                ObjServerRequest(thisAs<ObjServerExchange>().request)
-            }
-            bridgeFn(this, "respond", fnType(voidType, intType, nullableBufferType)) {
-                val self = thisAs<ObjServerExchange>()
-                val status = args.list.getOrNull(0)?.let { objToInt(this, it, "status") } ?: 200
-                val body = args.list.getOrNull(1)?.let { objBufferOrNull(this, it, "body") }
-                self.setHttpResponse(status, body?.byteArray?.toByteArray() ?: ByteArray(0))
-                ObjVoid
-            }
-            bridgeFn(this, "respondText", fnType(voidType, intType, stringType)) {
-                val self = thisAs<ObjServerExchange>()
-                val status = args.list.getOrNull(0)?.let { objToInt(this, it, "status") } ?: 200
-                val bodyText = args.list.getOrNull(1)?.let { objOrNullToString(this, it, "bodyText") } ?: ""
-                self.setHttpResponse(status, bodyText.encodeToByteArray())
-                ObjVoid
-            }
-            bridgeFn(this, "setHeader", fnType(voidType, stringType, stringType)) {
-                val self = thisAs<ObjServerExchange>()
-                val name = requiredArg<ObjString>(0).value
-                val value = requiredArg<ObjString>(1).value
-                self.ensureMutable(this)
-                self.responseHeaders[name] = mutableListOf(value)
-                ObjVoid
-            }
-            bridgeFn(this, "addHeader", fnType(voidType, stringType, stringType)) {
-                val self = thisAs<ObjServerExchange>()
-                val name = requiredArg<ObjString>(0).value
-                val value = requiredArg<ObjString>(1).value
-                self.ensureMutable(this)
-                self.responseHeaders.getOrPut(name) { mutableListOf() }.add(value)
-                ObjVoid
-            }
-            bridgeFn(
-                this,
-                "acceptWebSocket",
-                fnType(voidType, fnType(nullableAnyType, serverWebSocketType, serverExchangeType))
-            ) {
-                val self = thisAs<ObjServerExchange>()
-                val registered = captureCallable(requireScope(), args.list[0])
-                self.ensureMutable(this)
-                self.result = ExchangeResult.WebSocket(
-                    HttpHandlerResult.WebSocket { session ->
-                        registered.call(ObjServerWebSocket(session), self)
+        private val types = mutableMapOf<ObjClass, ObjClass>()
+
+        fun type(base: ObjClass): ObjClass =
+            types.getOrPut(base) {
+                object : ObjClass("ServerExchange") {
+                    override suspend fun callOn(scope: Scope): Obj {
+                        scope.raiseError("ServerExchange cannot be created directly")
                     }
-                )
-                ObjVoid
+                }.apply {
+                    bridgeProperty(this, "request", serverRequestType) {
+                        ObjServerRequest(thisAs<ObjServerExchange>().request)
+                    }
+                    bridgeProperty(this, "routeMatch", nullableRegexMatchType) {
+                        thisAs<ObjServerExchange>().routeMatch ?: ObjNull
+                    }
+                    bridgeProperty(this, "routeParams", mapType(stringType, stringType)) {
+                        thisAs<ObjServerExchange>().routeParams.toObjMap()
+                    }
+                    addFn(
+                        "jsonBody",
+                        callSignature = base.getInstanceMemberOrNull("jsonBody")?.callSignature
+                    ) {
+                        val self = thisAs<ObjServerExchange>()
+                        val targetType = resolveJsonTargetType(requireScope())
+                        val text = self.request.body.decodeToString()
+                        ObjJsonClass.decodeFromJsonElement(requireScope(), Json.parseToJsonElement(text), targetType)
+                    }
+                    bridgeFn(this, "respond", fnType(voidType, intType, nullableBufferType)) {
+                        val self = thisAs<ObjServerExchange>()
+                        val status = args.list.getOrNull(0)?.let { objToInt(this, it, "status") } ?: 200
+                        val body = args.list.getOrNull(1)?.let { objBufferOrNull(this, it, "body") }
+                        self.setHttpResponse(status, body?.byteArray?.toByteArray() ?: ByteArray(0))
+                        ObjVoid
+                    }
+                    bridgeFn(this, "respondText", fnType(voidType, intType, stringType)) {
+                        val self = thisAs<ObjServerExchange>()
+                        val status = args.list.getOrNull(0)?.let { objToInt(this, it, "status") } ?: 200
+                        val bodyText = args.list.getOrNull(1)?.let { objOrNullToString(this, it, "bodyText") } ?: ""
+                        self.setHttpResponse(status, bodyText.encodeToByteArray())
+                        ObjVoid
+                    }
+                    addFn(
+                        "respondJson",
+                        callSignature = base.getInstanceMemberOrNull("respondJson")?.callSignature
+                    ) {
+                        val self = thisAs<ObjServerExchange>()
+                        val body = args.list.getOrNull(0) ?: ObjNull
+                        val status = args.list.getOrNull(1)?.let { objToInt(this, it, "status") } ?: 200
+                        self.ensureMutable(this)
+                        self.responseHeaders["Content-Type"] = mutableListOf("application/json; charset=utf-8")
+                        val bodyText = if (body === ObjNull) {
+                            "null"
+                        } else {
+                            (body.invokeInstanceMethod(requireScope(), "toJsonString") as ObjString).value
+                        }
+                        self.setHttpResponse(status, bodyText.encodeToByteArray())
+                        ObjVoid
+                    }
+                    bridgeFn(this, "setHeader", fnType(voidType, stringType, stringType)) {
+                        val self = thisAs<ObjServerExchange>()
+                        val name = requiredArg<ObjString>(0).value
+                        val value = requiredArg<ObjString>(1).value
+                        self.ensureMutable(this)
+                        self.responseHeaders[name] = mutableListOf(value)
+                        ObjVoid
+                    }
+                    bridgeFn(this, "addHeader", fnType(voidType, stringType, stringType)) {
+                        val self = thisAs<ObjServerExchange>()
+                        val name = requiredArg<ObjString>(0).value
+                        val value = requiredArg<ObjString>(1).value
+                        self.ensureMutable(this)
+                        self.responseHeaders.getOrPut(name) { mutableListOf() }.add(value)
+                        ObjVoid
+                    }
+                    bridgeFn(
+                        this,
+                        "acceptWebSocket",
+                        fnType(voidType, fnType(nullableAnyType, serverWebSocketType, serverExchangeType))
+                    ) {
+                        val self = thisAs<ObjServerExchange>()
+                        val registered = captureCallable(requireScope(), args.list[0])
+                        self.ensureMutable(this)
+                        self.result = ExchangeResult.WebSocket(
+                            HttpHandlerResult.WebSocket { session ->
+                                registered.call(ObjServerWebSocket(session), self)
+                            }
+                        )
+                        ObjVoid
+                    }
+                    bridgeFn(this, "isHandled", fnType(boolType)) {
+                        ObjBool(thisAs<ObjServerExchange>().result !== ExchangeResult.Unhandled)
+                    }
+                }
             }
-            bridgeFn(this, "isHandled", fnType(boolType)) {
-                ObjBool(thisAs<ObjServerExchange>().result !== ExchangeResult.Unhandled)
-            }
-        }
     }
 
     private fun ensureMutable(scope: ScopeFacade) {
@@ -512,3 +773,17 @@ private fun objBufferOrNull(scope: ScopeFacade, value: Obj, name: String): ObjBu
     is ObjBuffer -> value
     else -> scope.raiseClassCastError("$name must be Buffer or null")
 }
+
+private fun resolveJsonTargetType(scope: Scope): TypeDecl {
+    val explicit = scope.args.explicitTypeArgs.singleOrNull()
+    if (explicit != null) return explicit
+    val bound = scope["T"]?.value
+    return when (bound) {
+        is ObjTypeExpr -> bound.typeDecl
+        is ObjClass -> TypeDecl.Simple(bound.className, false)
+        else -> scope.raiseIllegalArgument("jsonBody requires exactly one type argument")
+    }
+}
+
+private fun Map<String, String>.toObjMap(): ObjMap =
+    ObjMap(entries.associate { ObjString(it.key) to ObjString(it.value) }.toMutableMap())

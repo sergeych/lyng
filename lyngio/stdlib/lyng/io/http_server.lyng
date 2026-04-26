@@ -1,6 +1,7 @@
 package lyng.io.http.server
 
 import lyng.io.http.types
+import lyng.serialization
 import lyng.io.ws.types
 
 /* Immutable parsed incoming server request. */
@@ -8,7 +9,9 @@ extern class ServerRequest {
     val method: String
     val target: String
     val path: String
-    val query: String?
+    val pathParts: List<String>
+    val queryString: String?
+    val query: Map<String, String>
     val headers: HttpHeaders
     val body: Buffer
     fun text(): String
@@ -27,8 +30,12 @@ extern class ServerWebSocket {
 /* Mutable exchange object for one incoming request. */
 extern class ServerExchange {
     val request: ServerRequest
+    val routeMatch: RegexMatch?
+    val routeParams: Map<String, String>
+    fun jsonBody<T>(): T
     fun respond(status: Int = 200, body: Buffer? = null): void
     fun respondText(status: Int = 200, bodyText: String = ""): void
+    fun respondJson(body: Object?, status: Int = 200): void
     fun setHeader(name: String, value: String): void
     fun addHeader(name: String, value: String): void
     fun acceptWebSocket(handler: (ServerWebSocket, ServerExchange) -> Object?): void
@@ -43,12 +50,18 @@ extern class HttpServerHandle {
 
 /* Exact-path HTTP/WebSocket server with built-in router. */
 extern class HttpServer {
-    fun get(path: String, handler: (ServerExchange) -> Object?): HttpServer
-    fun post(path: String, handler: (ServerExchange) -> Object?): HttpServer
-    fun put(path: String, handler: (ServerExchange) -> Object?): HttpServer
-    fun delete(path: String, handler: (ServerExchange) -> Object?): HttpServer
-    fun any(path: String, handler: (ServerExchange) -> Object?): HttpServer
-    fun ws(path: String, handler: (ServerWebSocket, ServerExchange) -> Object?): HttpServer
+    fun get(path: String|Regex, handler: (ServerExchange) -> Object?): HttpServer
+    fun getPath(pathTemplate: String, handler: (ServerExchange) -> Object?): HttpServer
+    fun post(path: String|Regex, handler: (ServerExchange) -> Object?): HttpServer
+    fun postPath(pathTemplate: String, handler: (ServerExchange) -> Object?): HttpServer
+    fun put(path: String|Regex, handler: (ServerExchange) -> Object?): HttpServer
+    fun putPath(pathTemplate: String, handler: (ServerExchange) -> Object?): HttpServer
+    fun delete(path: String|Regex, handler: (ServerExchange) -> Object?): HttpServer
+    fun deletePath(pathTemplate: String, handler: (ServerExchange) -> Object?): HttpServer
+    fun any(path: String|Regex, handler: (ServerExchange) -> Object?): HttpServer
+    fun anyPath(pathTemplate: String, handler: (ServerExchange) -> Object?): HttpServer
+    fun ws(path: String|Regex, handler: (ServerWebSocket, ServerExchange) -> Object?): HttpServer
+    fun wsPath(pathTemplate: String, handler: (ServerWebSocket, ServerExchange) -> Object?): HttpServer
     fun fallback(handler: (ServerExchange) -> Object?): HttpServer
     fun listen(port: Int, host: String? = null, backlog: Int = 128): HttpServerHandle
 }

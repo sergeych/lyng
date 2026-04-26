@@ -40,13 +40,36 @@ internal data class HttpRequestHead(
     val method: String,
     val target: String,
     val path: String,
-    val query: String?,
+    val queryString: String?,
     val version: String,
     val headers: HttpHeaders,
     val contentLength: Int?,
     val wantsClose: Boolean,
     val wantsWebSocketUpgrade: Boolean,
-)
+) {
+    private var pathPartsParsed = false
+    private var pathPartsCache: List<String> = emptyList()
+    private var queryParsed = false
+    private var queryCache: Map<String, String> = emptyMap()
+
+    val pathParts: List<String>
+        get() {
+            if (!pathPartsParsed) {
+                pathPartsCache = parsePathParts(path)
+                pathPartsParsed = true
+            }
+            return pathPartsCache
+        }
+
+    val query: Map<String, String>
+        get() {
+            if (!queryParsed) {
+                queryCache = parseQueryParameters(queryString)
+                queryParsed = true
+            }
+            return queryCache
+        }
+}
 
 internal data class HttpRequest(
     val head: HttpRequestHead,
@@ -82,6 +105,89 @@ internal interface HttpServer {
     fun isOpen(): Boolean
     fun localAddress(): LyngSocketAddress
     fun close()
+}
+
+internal fun parsePathParts(path: String): List<String> {
+    if (path.isEmpty() || path == "/") return emptyList()
+    val raw = if (path.startsWith('/')) path.substring(1) else path
+    if (raw.isEmpty()) return emptyList()
+    return raw.split('/').map(::decodePathSegment)
+}
+
+internal fun parseQueryParameters(queryString: String?): Map<String, String> {
+    if (queryString.isNullOrEmpty()) return emptyMap()
+    val result = linkedMapOf<String, String>()
+    var start = 0
+    while (start <= queryString.length) {
+        val nextAmp = queryString.indexOf('&', start).let { if (it >= 0) it else queryString.length }
+        if (nextAmp > start) {
+            val part = queryString.substring(start, nextAmp)
+            val eqAt = part.indexOf('=')
+            val rawKey = if (eqAt >= 0) part.substring(0, eqAt) else part
+            val rawValue = if (eqAt >= 0) part.substring(eqAt + 1) else ""
+            result[decodeQueryComponent(rawKey, plusAsSpace = true)] = decodeQueryComponent(rawValue, plusAsSpace = true)
+        }
+        if (nextAmp == queryString.length) break
+        start = nextAmp + 1
+    }
+    return result
+}
+
+internal fun decodePathSegment(value: String): String = decodeQueryComponent(value, plusAsSpace = false)
+
+private fun decodeQueryComponent(value: String, plusAsSpace: Boolean): String {
+    if (value.isEmpty()) return value
+    val out = StringBuilder(value.length)
+    val bytes = ArrayList<Byte>()
+
+    fun flushBytes() {
+        if (bytes.isEmpty()) return
+        out.append(bytes.toByteArray().decodeToString())
+        bytes.clear()
+    }
+
+    var i = 0
+    while (i < value.length) {
+        when (val ch = value[i]) {
+            '+' -> {
+                flushBytes()
+                out.append(if (plusAsSpace) ' ' else '+')
+                i += 1
+            }
+            '%' -> {
+                val decoded = decodePercentByte(value, i)
+                if (decoded != null) {
+                    bytes += decoded.first.toByte()
+                    i = decoded.second
+                } else {
+                    flushBytes()
+                    out.append('%')
+                    i += 1
+                }
+            }
+            else -> {
+                flushBytes()
+                out.append(ch)
+                i += 1
+            }
+        }
+    }
+    flushBytes()
+    return out.toString()
+}
+
+private fun decodePercentByte(value: String, offset: Int): Pair<Int, Int>? {
+    if (offset + 2 >= value.length) return null
+    val hi = value[offset + 1].hexDigitValueOrNull() ?: return null
+    val lo = value[offset + 2].hexDigitValueOrNull() ?: return null
+    return ((hi shl 4) or lo) to (offset + 3)
+}
+
+private fun Char.hexDigitValueOrNull(): Int? = when (this) {
+    in '0'..'9' -> code - '0'.code
+    in 'a'..'f' -> code - 'a'.code + 10
+    in 'A'..'F' -> code - 'A'.code + 10
+    else -> null
 }
 
 internal fun defaultReason(status: Int): String = when (status) {
