@@ -87,8 +87,8 @@ private class StartedHttpServer(
                     withTimeout(config.keepAliveTimeoutMillis) {
                         parseHttpRequest(reader, config)
                     }
-                } catch (_: CancellationException) {
-                    throw CancellationException()
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: HttpProtocolException) {
                     safeWriteError(socket, e.status, e.message ?: defaultReason(e.status))
                     break
@@ -99,8 +99,8 @@ private class StartedHttpServer(
 
                 val result = try {
                     handler.handle(request)
-                } catch (_: CancellationException) {
-                    throw CancellationException()
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Throwable) {
                     HttpHandlerResult.Response(HttpResponse(status = 500, close = true))
                 }
