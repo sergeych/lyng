@@ -1016,17 +1016,21 @@ fun rewriteAnchors(
     }
 }
 
+private data class TocTreeNode(
+    val headingLevel: Int,
+    val id: String,
+    val title: String,
+    val children: MutableList<TocTreeNode> = mutableListOf(),
+)
+
 fun buildToc(root: HTMLElement): List<TocItem> {
-    val out = mutableListOf<TocItem>()
     val used = hashSetOf<String>()
-    val hs = root.querySelectorAll("h1, h2, h3")
+    val tocRoot = TocTreeNode(headingLevel = 0, id = "", title = "")
+    val stack = mutableListOf(tocRoot)
+    val hs = root.querySelectorAll("h1, h2, h3, h4, h5, h6")
     for (i in 0 until hs.length) {
         val h = hs.item(i) as? HTMLHeadingElement ?: continue
-        val level = when (h.tagName.uppercase()) {
-            "H1" -> 1
-            "H2" -> 2
-            else -> 3
-        }
+        val level = h.tagName.removePrefix("H").toIntOrNull() ?: continue
         var id = h.id.ifBlank { slugify(h.textContent ?: "") }
         if (id.isBlank()) id = "section-${i + 1}"
         var unique = id
@@ -1036,8 +1040,19 @@ fun buildToc(root: HTMLElement): List<TocItem> {
             n++
         }
         h.id = unique
-        out += TocItem(level, unique, h.textContent ?: "")
+
+        while (stack.last().headingLevel >= level) stack.removeAt(stack.lastIndex)
+        val node = TocTreeNode(level, unique, h.textContent ?: "")
+        stack.last().children += node
+        stack += node
     }
+
+    val out = mutableListOf<TocItem>()
+    fun visit(node: TocTreeNode, normalizedLevel: Int) {
+        if (node.id.isNotEmpty()) out += TocItem(normalizedLevel, node.id, node.title)
+        node.children.forEach { child -> visit(child, normalizedLevel + 1) }
+    }
+    tocRoot.children.forEach { child -> visit(child, 1) }
     return out
 }
 

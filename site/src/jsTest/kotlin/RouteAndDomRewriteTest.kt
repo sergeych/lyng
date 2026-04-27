@@ -71,5 +71,37 @@ class RouteAndDomRewriteTest {
             val el = root.ownerDocument?.getElementById(id) ?: root.querySelector("#${id}")
             assertNotNull(el, "Heading with id $id should be present in DOM")
         }
+
+        assertEquals(listOf(1, 2, 2, 3), toc.map { it.level })
+    }
+
+    @Test
+    fun testBuildToc_normalizesStartingLevelAndGaps() {
+        val root = document.createElement("div") as HTMLElement
+        root.innerHTML = """
+            <h3>Top</h3>
+            <h5>Deep child</h5>
+            <h4>Middle sibling</h4>
+            <h6>Nested</h6>
+        """.trimIndent()
+
+        val toc = buildToc(root)
+
+        assertEquals(listOf("Top", "Deep child", "Middle sibling", "Nested"), toc.map { it.title })
+        assertEquals(listOf(1, 2, 2, 3), toc.map { it.level })
+    }
+
+    @Test
+    fun testBuildToc_supportsAllHeadingLevels() {
+        val root = document.createElement("div") as HTMLElement
+        root.innerHTML = """
+            <h4>Start</h4>
+            <h5>Child</h5>
+            <h6>Grandchild</h6>
+        """.trimIndent()
+
+        val toc = buildToc(root)
+
+        assertEquals(listOf(1, 2, 3), toc.map { it.level })
     }
 }

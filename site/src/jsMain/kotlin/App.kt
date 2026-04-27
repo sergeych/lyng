@@ -176,7 +176,7 @@ private fun TocNav(
         Ul({ classes("list-unstyled", "mb-0") }) {
             toc.forEach { item ->
                 Li({ classes("mb-1") }) {
-                    val pad = when (item.level) { 1 -> "0"; 2 -> "0.75rem"; else -> "1.5rem" }
+                    val pad = "${(item.level - 1) * 0.75}rem"
                     val routeNoFrag = route.substringBefore('#')
                     val tocHref = "#/$routeNoFrag#${item.id}"
                     A(attrs = {
