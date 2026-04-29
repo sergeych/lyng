@@ -45,6 +45,7 @@ import net.sergeych.lyng.io.db.createDbModule
 import net.sergeych.lyng.io.db.jdbc.createJdbcModule
 import net.sergeych.lyng.io.db.sqlite.createSqliteModule
 import net.sergeych.lyng.io.fs.createFs
+import net.sergeych.lyng.io.html.createHtmlModule
 import net.sergeych.lyng.io.http.createHttpModule
 import net.sergeych.lyng.io.http.server.createHttpServerModule
 import net.sergeych.lyng.io.net.createNetModule
@@ -146,6 +147,7 @@ private fun ImportManager.invalidateCliModuleCaches() {
     invalidatePackageCache("lyng.io.console")
     invalidatePackageCache("lyng.io.db.jdbc")
     invalidatePackageCache("lyng.io.db.sqlite")
+    invalidatePackageCache("lyng.io.html")
     invalidatePackageCache("lyng.io.http")
     invalidatePackageCache("lyng.io.http.server")
     invalidatePackageCache("lyng.io.ws")
@@ -237,6 +239,7 @@ private fun installCliModules(manager: ImportManager) {
     createDbModule(manager)
     createJdbcModule(manager)
     createSqliteModule(manager)
+    createHtmlModule(manager)
     createHttpModule(PermitAllHttpAccessPolicy, manager)
     createHttpServerModule(PermitAllNetAccessPolicy, manager)
     createWsModule(PermitAllWsAccessPolicy, manager)

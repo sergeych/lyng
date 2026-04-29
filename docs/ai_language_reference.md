@@ -83,6 +83,7 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
 ## 4. Operators (implemented)
 - Assignment: `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `?=`.
 - Logical: `||`, `&&`, unary `!`.
+- Unary arithmetic/bitwise: unary `+`, unary `-`, `~`.
 - Bitwise: `|`, `^`, `&`, `~`, shifts `<<`, `>>`.
 - Equality/comparison: `==`, `!=`, `===`, `!==`, `<`, `<=`, `>`, `>=`, `<=>`, `=~`, `!~`.
 - Type/containment: `is`, `!is`, `in`, `!in`, `as`, `as?`.
@@ -119,6 +120,7 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
   - shorthand: `fun f(x) = expr`.
   - generics: `fun f<T>(x: T): T`.
   - extension functions: `fun Type.name(...) { ... }`.
+  - context-aware extension functions: `context(Tag) fun String.unaryPlus() { this@Tag.addText(this) }`.
   - named singleton `object` declarations can be extension receivers too: `fun Config.describe(...) { ... }`, `val Config.tag get() = ...`.
   - static extension functions are callable on the type object: `static fun List<T>.fill(...)` -> `List.fill(...)`.
   - delegated callable: `fun f(...) by delegate`.

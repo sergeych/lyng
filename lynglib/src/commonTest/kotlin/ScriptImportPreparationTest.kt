@@ -190,4 +190,63 @@ class ScriptImportPreparationTest {
             session.cancelAndJoin()
         }
     }
+
+    @Test
+    fun importedContextReceiverExtensionIsAvailableInReceiverDsl() = runTest {
+        val manager = Script.defaultImportManager.copy().apply {
+            addTextPackages(
+                """
+                package imported.ctxdsl
+
+                class Tag(name: String) {
+                    val name = name
+                    var inner = ""
+
+                    fun child(tagName: String, block: Tag.()->void) {
+                        val child = Tag(tagName)
+                        child.apply { block(this) }
+                        inner += child.render()
+                    }
+
+                    fun h3(block: Tag.()->void) { child("h3", block) }
+                    fun addText(text: String) { inner += text }
+                    fun render() = "<" + name + ">" + inner + "</" + name + ">"
+                }
+
+                context(Tag)
+                fun String.unaryPlus() {
+                    this@Tag.addText(this)
+                }
+                """.trimIndent()
+            )
+        }
+        val script = Compiler.compile(
+            Source(
+                "<ctx-dsl-import>",
+                """
+                import imported.ctxdsl
+
+                fun html(block: Tag.()->void) {
+                    val root = Tag("html")
+                    root.apply { block(this) }
+                    root.render()
+                }
+
+                val page = html {
+                    h3 {
+                        +"Imported"
+                    }
+                }
+
+                assertEquals("<html><h3>Imported</h3></html>", page)
+                assertEquals("plain", +"plain")
+                page
+                """.trimIndent()
+            ),
+            manager
+        )
+
+        val result = script.execute(manager.newStdScope()) as ObjString
+        assertEquals("<html><h3>Imported</h3></html>", result.value)
+    }
 }

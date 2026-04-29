@@ -54,6 +54,197 @@ class OperatorOverloadingTest {
     }
 
     @Test
+    fun testUnaryPlusDefaultIdentity() = runTest {
+        eval("""
+            assertEquals(42, +42)
+            assertEquals(3.5, +3.5)
+            assertEquals("abc", +"abc")
+
+            class Box(val text: String) {
+                fun upper() = text.upper()
+            }
+
+            assertEquals("ABC", (+Box("abc")).upper())
+        """.trimIndent())
+    }
+
+    @Test
+    fun testUnaryPlusOverloading() = runTest {
+        eval("""
+            class Counter(val n: Int) {
+                fun unaryPlus() = Counter(this.n + 1)
+                fun equals(other: Counter) = this.n == other.n
+            }
+
+            assertEquals(Counter(6), Counter(5).unaryPlus())
+            assertEquals(Counter(6), +Counter(5))
+        """.trimIndent())
+    }
+
+    @Test
+    fun testUnaryPlusExtensionOverloading() = runTest {
+        eval("""
+            var out = ""
+            fun String.unaryPlus() {
+                out = out + this
+            }
+
+            "Hello".unaryPlus()
+            " ".unaryPlus()
+            "Lyng".unaryPlus()
+            assertEquals("Hello Lyng", out)
+            out = ""
+
+            +"Hello"
+            +" "
+            +"Lyng"
+            assertEquals("Hello Lyng", out)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testUnaryPlusDslBuilderStyle() = runTest {
+        eval("""
+            class Tag(name: String) {
+                val name = name
+                var inner = ""
+
+                fun child(tagName: String, block: Tag.()->void) {
+                    val child = Tag(tagName)
+                    with(child) { block(this) }
+                    inner += child.render()
+                }
+
+                fun head(block: Tag.()->void) { child("head", block) }
+                fun body(block: Tag.()->void) { child("body", block) }
+                fun title(block: Tag.()->void) { child("title", block) }
+                fun h1(block: Tag.()->void) { child("h1", block) }
+
+                fun addText(text: String) {
+                    inner += text
+                }
+
+                fun render() {
+                    "<" + name + ">" + inner + "</" + name + ">"
+                }
+            }
+
+            context(Tag)
+            fun String.unaryPlus() {
+                this@Tag.addText(this)
+            }
+
+            fun html(block: Tag.()->void) {
+                val root = Tag("html")
+                with(root) { block(this) }
+                root.render()
+            }
+
+            val page = html {
+                head {
+                    title {
+                        +"Demo"
+                    }
+                }
+                body {
+                    h1 {
+                        +"Heading 1"
+                    }
+                }
+            }
+
+            assertEquals("<html><head><title>Demo</title></head><body><h1>Heading 1</h1></body></html>", page)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testContextReceiverUnaryPlusDslBuilderStyle() = runTest {
+        eval("""
+            class Tag(name: String) {
+                val name = name
+                var inner = ""
+
+                fun child(tagName: String, block: Tag.()->void) {
+                    val child = Tag(tagName)
+                    with(child) { block(this) }
+                    inner += child.render()
+                }
+
+                fun h3(block: Tag.()->void) { child("h3", block) }
+
+                fun addText(text: String) {
+                    inner += text
+                }
+
+                fun render() {
+                    "<" + name + ">" + inner + "</" + name + ">"
+                }
+            }
+
+            context(Tag)
+            fun String.unaryPlus() {
+                this@Tag.addText(this)
+            }
+
+            fun html(block: Tag.()->void) {
+                val root = Tag("html")
+                with(root) { block(this) }
+                root.render()
+            }
+
+            val page = html {
+                h3 {
+                    +"Heading 3"
+                }
+            }
+
+            assertEquals("<html><h3>Heading 3</h3></html>", page)
+            assertEquals("plain", +"plain")
+        """.trimIndent())
+    }
+
+    @Test
+    fun testContextReceiverExtensionIsHiddenOutsideContext() = runTest {
+        val ex = assertFailsWith<Throwable> {
+            eval("""
+                class Tag {
+                    fun wrap(text: String) = "[" + text + "]"
+                }
+
+                context(Tag)
+                fun String.mark() = this@Tag.wrap(this)
+
+                "x".mark()
+            """.trimIndent())
+        }
+        assertContains(ex.message ?: "", "no such member: mark on String")
+    }
+
+    @Test
+    fun testContextReceiverExtensionIsHiddenInWrongContext() = runTest {
+        val ex = assertFailsWith<Throwable> {
+            eval("""
+                class Tag {
+                    fun wrap(text: String) = "[" + text + "]"
+                }
+                class Other
+
+                context(Tag)
+                fun String.mark() = this@Tag.wrap(this)
+
+                fun other(block: Other.()->void) {
+                    with(Other()) { block(this) }
+                }
+
+                other {
+                    "x".mark()
+                }
+            """.trimIndent())
+        }
+        assertContains(ex.message ?: "", "no such member: mark on String")
+    }
+
+    @Test
     fun testPlusAssignOverloading() = runTest {
         eval("""
             class Counter(var n: Int) {

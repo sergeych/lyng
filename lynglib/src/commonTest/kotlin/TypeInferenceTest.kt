@@ -15,7 +15,7 @@
  *
  */
 
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.eval
 import kotlin.test.Test
 
@@ -30,7 +30,7 @@ class TypeInferenceTest {
 
     /** Channel field type inferred from constructor — accessed in a launch closure */
     @Test
-    fun testChannelFieldInLaunchClosure() = runBlocking<Unit> {
+    fun testChannelFieldInLaunchClosure() = runTest {
         eval("""
             class Foo {
                 private val ch = Channel(Channel.UNLIMITED)
@@ -52,7 +52,7 @@ class TypeInferenceTest {
 
     /** Mutex field type inferred from constructor — used directly in a method body */
     @Test
-    fun testMutexFieldDirectUse() = runBlocking<Unit> {
+    fun testMutexFieldDirectUse() = runTest {
         eval("""
             class Bar {
                 private val mu = Mutex()
@@ -69,7 +69,7 @@ class TypeInferenceTest {
 
     /** CompletableDeferred field type inferred — complete/await used directly */
     @Test
-    fun testCompletableDeferredFieldDirectUse() = runBlocking<Unit> {
+    fun testCompletableDeferredFieldDirectUse() = runTest {
         eval("""
             class Baz {
                 private val d = CompletableDeferred()
@@ -84,7 +84,7 @@ class TypeInferenceTest {
 
     /** Channel field accessed inside a map closure within class initializer */
     @Test
-    fun testChannelFieldInMapAndLaunchClosure() = runBlocking<Unit> {
+    fun testChannelFieldInMapAndLaunchClosure() = runTest {
         eval("""
             class Pool(n) {
                 private val ch = Channel(Channel.UNLIMITED)
@@ -106,7 +106,7 @@ class TypeInferenceTest {
     }
 
     @Test
-    fun testIterableFirstPreservesElementTypeForBlockReturnInference() = runBlocking<Unit> {
+    fun testIterableFirstPreservesElementTypeForBlockReturnInference() = runTest {
         eval("""
             class Item(title: String)
 
@@ -121,7 +121,7 @@ class TypeInferenceTest {
     }
 
     @Test
-    fun testCallableLocalInitializedFromFunctionCallPreservesReturnType() = runBlocking<Unit> {
+    fun testCallableLocalInitializedFromFunctionCallPreservesReturnType() = runTest {
         eval("""
             fun makeAdder(base) {
                 return { x -> x + base + 0.5 }

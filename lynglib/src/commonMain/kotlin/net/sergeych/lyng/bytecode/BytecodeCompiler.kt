@@ -43,6 +43,7 @@ class BytecodeCompiler(
     private val callableReturnTypeByScopeId: Map<Int, Map<Int, ObjClass>> = emptyMap(),
     private val callableReturnTypeByName: Map<String, ObjClass> = emptyMap(),
     private val callSignatureByName: Map<String, CallSignature> = emptyMap(),
+    private val extensionContextReceiversByWrapperName: Map<String, List<String>> = emptyMap(),
     private val externCallableNames: Set<String> = emptySet(),
     private val externBindingNames: Set<String> = emptySet(),
     private val preparedModuleBindingNames: Set<String> = emptySet(),
@@ -1146,62 +1147,114 @@ class BytecodeCompiler(
     }
 
     private fun compileUnary(ref: UnaryOpRef): CompiledValue? {
-        val a = compileRef(unaryOperand(ref)) ?: return null
-        val out = allocSlot()
         return when (unaryOp(ref)) {
-            UnaryOp.NEGATE -> when (a.type) {
-                SlotType.INT -> {
-                    builder.emit(Opcode.NEG_INT, a.slot, out)
-                    CompiledValue(out, SlotType.INT)
+            UnaryOp.POSITIVE -> {
+                val operandRef = unaryOperand(ref)
+                if (hasUnaryCallable(operandRef, "unaryPlus")) {
+                    return compileMethodCall(MethodCallRef(operandRef, "unaryPlus", emptyList(), false, false))
                 }
-                SlotType.REAL -> {
-                    builder.emit(Opcode.NEG_REAL, a.slot, out)
-                    CompiledValue(out, SlotType.REAL)
-                }
-                else -> compileObjUnaryOp(unaryOperand(ref), a, "negate", Pos.builtIn)
-            }
-            UnaryOp.NOT -> {
-                when (a.type) {
-                    SlotType.BOOL -> builder.emit(Opcode.NOT_BOOL, a.slot, out)
-                    SlotType.INT -> {
-                        val tmp = allocSlot()
-                        builder.emit(Opcode.INT_TO_BOOL, a.slot, tmp)
-                        builder.emit(Opcode.NOT_BOOL, tmp, out)
+                val a = compileRef(operandRef) ?: return null
+                return when (a.type) {
+                    SlotType.INT, SlotType.REAL -> a
+                    else -> {
+                        val obj = ensureObjSlot(a)
+                        val out = allocSlot()
+                        builder.emit(Opcode.POS_OBJ, obj.slot, out)
+                        updateSlotType(out, SlotType.OBJ)
+                        slotObjClass[obj.slot]?.let { slotObjClass[out] = it }
+                        CompiledValue(out, SlotType.OBJ)
                     }
-                    SlotType.OBJ, SlotType.UNKNOWN -> {
-                        val objSlot = ensureObjSlot(a)
-                        val tmp = allocSlot()
-                        builder.emit(Opcode.OBJ_TO_BOOL, objSlot.slot, tmp)
-                        builder.emit(Opcode.NOT_BOOL, tmp, out)
-                        updateSlotType(tmp, SlotType.BOOL)
-                    }
-                    else -> return null
                 }
-                CompiledValue(out, SlotType.BOOL)
             }
-            UnaryOp.BITNOT -> {
-                if (a.type == SlotType.INT) {
-                    builder.emit(Opcode.INV_INT, a.slot, out)
-                    return CompiledValue(out, SlotType.INT)
+            else -> {
+                val a = compileRef(unaryOperand(ref)) ?: return null
+                val out = allocSlot()
+                when (unaryOp(ref)) {
+                    UnaryOp.NEGATE -> when (a.type) {
+                        SlotType.INT -> {
+                            builder.emit(Opcode.NEG_INT, a.slot, out)
+                            CompiledValue(out, SlotType.INT)
+                        }
+                        SlotType.REAL -> {
+                            builder.emit(Opcode.NEG_REAL, a.slot, out)
+                            CompiledValue(out, SlotType.REAL)
+                        }
+                        else -> compileObjUnaryOp(unaryOperand(ref), a, "negate", Pos.builtIn)
+                    }
+                    UnaryOp.NOT -> {
+                        when (a.type) {
+                            SlotType.BOOL -> builder.emit(Opcode.NOT_BOOL, a.slot, out)
+                            SlotType.INT -> {
+                                val tmp = allocSlot()
+                                builder.emit(Opcode.INT_TO_BOOL, a.slot, tmp)
+                                builder.emit(Opcode.NOT_BOOL, tmp, out)
+                            }
+                            SlotType.OBJ, SlotType.UNKNOWN -> {
+                                val objSlot = ensureObjSlot(a)
+                                val tmp = allocSlot()
+                                builder.emit(Opcode.OBJ_TO_BOOL, objSlot.slot, tmp)
+                                builder.emit(Opcode.NOT_BOOL, tmp, out)
+                                updateSlotType(tmp, SlotType.BOOL)
+                            }
+                            else -> return null
+                        }
+                        CompiledValue(out, SlotType.BOOL)
+                    }
+                    UnaryOp.BITNOT -> {
+                        if (a.type == SlotType.INT) {
+                            builder.emit(Opcode.INV_INT, a.slot, out)
+                            return CompiledValue(out, SlotType.INT)
+                        }
+                        return compileObjUnaryOp(unaryOperand(ref), a, "bitNot", Pos.builtIn)
+                    }
+                    UnaryOp.POSITIVE -> error("unreachable")
                 }
-                return compileObjUnaryOp(unaryOperand(ref), a, "bitNot", Pos.builtIn)
             }
         }
+    }
+
+    private fun hasUnaryCallable(ref: ObjRef, memberName: String): Boolean {
+        val receiverClass = resolveReceiverClass(ref) ?: return false
+        if (receiverClass == ObjDynamic.type) return false
+        if (receiverClass is ObjInstanceClass && !isThisReceiver(ref)) return true
+        val resolvedMember = receiverClass.resolveInstanceMember(memberName)
+        if (resolvedMember?.declaringClass?.className == "Obj") return false
+        val abstractRecord = receiverClass.members[memberName] ?: receiverClass.classScope?.objects?.get(memberName)
+        if (abstractRecord?.isAbstract == true) return false
+        val methodId = receiverClass.instanceMethodIdMap(includeAbstract = true)[memberName]
+        if (methodId != null && resolvedMember?.declaringClass?.className != "Obj") return true
+        val fieldId = if (resolvedMember != null) receiverClass.instanceFieldIdMap()[memberName] else null
+        if (fieldId != null) return true
+        return resolveExtensionCallableSlot(receiverClass, memberName) != null
     }
 
     private fun compileObjUnaryOp(
         ref: ObjRef,
         value: CompiledValue,
         memberName: String,
-        pos: Pos
+        pos: Pos,
+        defaultIdentity: Boolean = false
     ): CompiledValue? {
-        val receiverClass = resolveReceiverClass(ref)
+        val receiverClass = resolveReceiverClass(ref) ?: slotObjClass[value.slot]
         val methodId = receiverClass?.instanceMethodIdMap(includeAbstract = true)?.get(memberName)
         if (methodId != null) {
             val receiverObj = ensureObjSlot(value)
             val dst = allocSlot()
             builder.emit(Opcode.CALL_MEMBER_SLOT, receiverObj.slot, methodId, 0, 0, dst)
             updateSlotType(dst, SlotType.OBJ)
+            return CompiledValue(dst, SlotType.OBJ)
+        }
+        val extSlot = when {
+            receiverClass != null -> resolveExtensionCallableSlot(receiverClass, memberName)
+            else -> resolveUniqueExtensionWrapperSlot(memberName, "__ext__")
+        }
+        if (extSlot != null) {
+            val callee = ensureObjSlot(extSlot)
+            val args = compileCallArgsWithReceiver(value, emptyList(), false) ?: return null
+            val encodedCount = encodeCallArgCount(args) ?: return null
+            val dst = allocSlot()
+            setPos(pos)
+            emitCallCompiled(callee, args.base, encodedCount, dst)
             return CompiledValue(dst, SlotType.OBJ)
         }
         if (memberName == "negate" &&
@@ -1216,6 +1269,9 @@ class BytecodeCompiler(
             builder.emit(Opcode.SUB_OBJ, zeroSlot, obj.slot, dst)
             updateSlotType(dst, SlotType.OBJ)
             return CompiledValue(dst, SlotType.OBJ)
+        }
+        if (defaultIdentity) {
+            return value
         }
         throw BytecodeCompileException(
             "Unknown member $memberName on ${receiverClass?.className ?: "unknown"}",
@@ -5972,6 +6028,7 @@ class BytecodeCompiler(
     ): String? {
         for (receiverName in extensionReceiverTypeNames(receiverClass)) {
             val candidate = wrapperName(receiverName, memberName)
+            if (!extensionContextReceiversSatisfied(candidate)) continue
             if (allowedScopeNames != null &&
                 !allowedScopeNames.contains(candidate) &&
                 !localSlotIndexByName.containsKey(candidate)
@@ -5983,6 +6040,31 @@ class BytecodeCompiler(
         return null
     }
 
+    private fun currentImplicitReceiverTypeNames(): List<String> {
+        val result = mutableListOf<String>()
+        inlineThisBindings.asReversed().forEach { binding ->
+            val typeName = binding.typeName ?: return@forEach
+            if (!result.contains(typeName)) result += typeName
+        }
+        implicitThisTypeName?.let {
+            if (!result.contains(it)) result += it
+        }
+        return result
+    }
+
+    private fun extensionContextReceiversSatisfied(wrapperName: String): Boolean {
+        val required = extensionContextReceiversByWrapperName[wrapperName].orEmpty()
+        if (required.isEmpty()) return true
+        val visible = currentImplicitReceiverTypeNames()
+        return required.all { req ->
+            visible.any { visibleName ->
+                visibleName == req || resolveTypeNameClass(visibleName)?.let { cls ->
+                    cls.className == req || cls.mro.any { it.className == req }
+                } == true
+            }
+        }
+    }
+
     private fun resolveUniqueExtensionWrapperName(
         memberName: String,
         wrapperPrefix: String
@@ -5991,12 +6073,12 @@ class BytecodeCompiler(
         val candidates = LinkedHashSet<String>()
         for (name in localSlotIndexByName.keys) {
             if (name.startsWith(wrapperPrefix) && name.endsWith(suffix)) {
-                candidates.add(name)
+                if (extensionContextReceiversSatisfied(name)) candidates.add(name)
             }
         }
         for (name in scopeSlotIndexByName.keys) {
             if (name.startsWith(wrapperPrefix) && name.endsWith(suffix)) {
-                candidates.add(name)
+                if (extensionContextReceiversSatisfied(name)) candidates.add(name)
             }
         }
         return candidates.singleOrNull()
@@ -8312,6 +8394,19 @@ class BytecodeCompiler(
                 is ObjBool -> ObjBool.type
                 is ObjChar -> ObjChar.type
                 else -> null
+            }
+            is UnaryOpRef -> when (ref.op) {
+                UnaryOp.NOT -> ObjBool.type
+                UnaryOp.POSITIVE -> resolveReceiverClass(ref.a)
+                UnaryOp.NEGATE -> when (val operandClass = resolveReceiverClass(ref.a)) {
+                    ObjInt.type -> ObjInt.type
+                    ObjReal.type -> ObjReal.type
+                    else -> inferMethodCallReturnClass(operandClass, "negate")
+                }
+                UnaryOp.BITNOT -> when (val operandClass = resolveReceiverClass(ref.a)) {
+                    ObjInt.type -> ObjInt.type
+                    else -> inferMethodCallReturnClass(operandClass, "bitNot")
+                }
             }
             is CastRef -> resolveTypeRefClass(ref.castTypeRef())
                 ?: resolveReceiverClass(ref.castValueRef())

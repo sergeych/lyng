@@ -15,17 +15,21 @@
  *
  */
 
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import net.sergeych.lyng.eval as lyngEval
 
 class LaunchPoolTest {
 
-    private suspend fun eval(code: String) = withTimeout(2_000L) { lyngEval(code) }
+    private suspend fun eval(code: String) = withContext(Dispatchers.Default) {
+        withTimeout(2_000L) { lyngEval(code) }
+    }
 
     @Test
-    fun testBasicExecution() = runBlocking<Unit> {
+    fun testBasicExecution() = runTest {
         eval("""
             val pool = LaunchPool(2)
             val d1 = pool.launch { 1 + 1 }
@@ -37,7 +41,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testResultsCollected() = runBlocking<Unit> {
+    fun testResultsCollected() = runTest {
         eval("""
             val pool = LaunchPool(4)
             val jobs = (1..10).map { n -> pool.launch { n * n } }
@@ -48,7 +52,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testConcurrencyLimit() = runBlocking<Unit> {
+    fun testConcurrencyLimit() = runTest {
         eval("""
             // With maxWorkers=2, at most 2 tasks run at the same time.
             val mu = Mutex()
@@ -70,7 +74,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testExceptionCapturedInDeferred() = runBlocking<Unit> {
+    fun testExceptionCapturedInDeferred() = runTest {
         eval("""
             val pool = LaunchPool(2)
             val good = pool.launch { 42 }
@@ -83,7 +87,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testPoolContinuesAfterLambdaException() = runBlocking<Unit> {
+    fun testPoolContinuesAfterLambdaException() = runTest {
         eval("""
             val pool = LaunchPool(1)
             val bad  = pool.launch { throw IllegalArgumentException("fail") }
@@ -96,7 +100,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testLaunchAfterCloseAndJoinThrows() = runBlocking<Unit> {
+    fun testLaunchAfterCloseAndJoinThrows() = runTest {
         eval("""
             val pool = LaunchPool(2)
             pool.launch { 1 }
@@ -107,7 +111,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testLaunchAfterCancelThrows() = runBlocking<Unit> {
+    fun testLaunchAfterCancelThrows() = runTest {
         eval("""
             val pool = LaunchPool(2)
             pool.cancel()
@@ -117,7 +121,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testCancelAndJoinWaitsForWorkers() = runBlocking<Unit> {
+    fun testCancelAndJoinWaitsForWorkers() = runTest {
         eval("""
             val pool = LaunchPool(2)
             pool.launch { delay(5) }
@@ -128,7 +132,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testCloseAndJoinDrainsQueue() = runBlocking<Unit> {
+    fun testCloseAndJoinDrainsQueue() = runTest {
         eval("""
             val mu = Mutex()
             val results = []
@@ -147,7 +151,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testBoundedQueueSuspendsProducer() = runBlocking<Unit> {
+    fun testBoundedQueueSuspendsProducer() = runTest {
         eval("""
             // queue of 2 + 1 worker; producer can only be 1 ahead of what's running
             val pool = LaunchPool(1, 2)
@@ -165,7 +169,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testUnlimitedQueueDefault() = runBlocking<Unit> {
+    fun testUnlimitedQueueDefault() = runTest {
         eval("""
             val pool = LaunchPool(4)
             val jobs = (1..50).map { n -> pool.launch { n } }
@@ -177,7 +181,7 @@ class LaunchPoolTest {
     }
 
     @Test
-    fun testIdempotentClose() = runBlocking<Unit> {
+    fun testIdempotentClose() = runTest {
         eval("""
             val pool = LaunchPool(2)
             pool.closeAndJoin()

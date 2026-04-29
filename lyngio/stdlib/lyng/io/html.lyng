@@ -1,0 +1,22 @@
+package lyng.io.html
+
+/*
+    HTML helpers package.
+    API surface is intentionally empty for now; this package exists so Lyng code
+    can import `lyng.io.html` and grow declarations here incrementally.
+*/
+
+class HtmlBuilder {
+
+    private val head: List<String> = []
+    private val body: List<String> = []
+
+    fun build(): String =
+            "<HTML>" +
+            (head.isEmpty() ? "" : head.joinToString("\n")) +
+            (body.isEmpty() ? "" : body.joinToString("\n")) +
+            "</HTML>"
+}
+
+fun buildHtml(f: HtmlBuilder.()->void): String {
+    HtmlBuilder().apply(f).build()

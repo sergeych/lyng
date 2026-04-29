@@ -99,6 +99,20 @@ open class Scope(
         extensions.getOrPut(cls) { mutableMapOf() }[name] = record
     }
 
+    private fun extensionContextReceiversSatisfied(record: ObjRecord): Boolean {
+        val fnType = record.typeDecl as? TypeDecl.Function ?: return true
+        if (fnType.contextReceivers.isEmpty()) return true
+        return fnType.contextReceivers.all { required ->
+            thisVariants.any { variant ->
+                when (required) {
+                    is TypeDecl.Simple -> variant.isInstanceOf(required.name.substringAfterLast('.'))
+                    is TypeDecl.Generic -> variant.isInstanceOf(required.name.substringAfterLast('.'))
+                    else -> false
+                }
+            }
+        }
+    }
+
     internal fun findExtension(receiverClass: ObjClass, name: String): ObjRecord? {
         var s: Scope? = this
         var hops = 0
@@ -106,7 +120,9 @@ open class Scope(
             // Proximity rule: check all extensions in the current scope before going to parent.
             // Priority within scope: more specific class in MRO wins.
             for (cls in receiverClass.mro) {
-                s.extensions[cls]?.get(name)?.let { return it }
+                s.extensions[cls]?.get(name)?.let {
+                    if (extensionContextReceiversSatisfied(it)) return it
+                }
             }
             if (s is BytecodeClosureScope) {
                 s.closureScope.findExtension(receiverClass, name)?.let { return it }

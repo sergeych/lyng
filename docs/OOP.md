@@ -479,6 +479,18 @@ val block: context(Html, Head) Body.()->String = {
 }
 ```
 
+Context receivers can also constrain extension functions. The extension is visible only when the required receiver is
+already in the implicit receiver stack:
+
+```lyng
+class Tag { fun addText(text: String) { /* ... */ } }
+
+context(Tag)
+fun String.unaryPlus() {
+    this@Tag.addText(this)
+}
+```
+
 - Field inheritance (`val`/`var`) and collisions
   - Instance storage is kept per declaring class, internally disambiguated; unqualified read/write resolves to the first match in the resolution order (leftmost base).
   - Qualified read/write (via `this@Type` or casts) targets the chosen ancestor’s storage.
@@ -650,9 +662,13 @@ Unary operators are overloaded by defining methods with no arguments:
 
 | Operator | Method Name |
 | :--- | :--- |
+| `+a` | `unaryPlus()` |
 | `-a` | `negate()` |
 | `!a` | `logicalNot()` |
 | `~a` | `bitNot()` |
+
+`unaryPlus()` is useful in DSL-style builders where `+"text"` should append text to
+the current receiver. See [samples/html_builder_dsl.lyng](samples/html_builder_dsl.lyng).
 
 ### Assignment Operators
 

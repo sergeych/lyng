@@ -1,6 +1,9 @@
 // Sample: Operator Overloading in Lyng
 
 class Vector<T>(val x: T, val y: T) {
+    // Overload unary +
+    fun unaryPlus() = this
+
     // Overload +
     fun plus(other: Vector<U>) = Vector(x + other.x, y + other.y)
     
@@ -27,6 +30,11 @@ val v2 = Vector(5, 5)
 
 println("v1: " + v1)
 println("v2: " + v2)
+
+// Test unary +
+val v0 = +v1
+println("+v1 = " + v0)
+assertEquals(Vector(10, 20), v0)
 
 // Test binary +
 val v3 = v1 + v2

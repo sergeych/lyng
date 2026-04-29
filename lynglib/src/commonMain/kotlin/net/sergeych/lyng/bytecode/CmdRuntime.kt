@@ -1942,6 +1942,14 @@ class CmdCmpGteObj(internal val a: Int, internal val b: Int, internal val dst: I
     }
 }
 
+class CmdPosObj(internal val a: Int, internal val dst: Int) : Cmd() {
+    override suspend fun perform(frame: CmdFrame) {
+        val result = frame.slotToObj(a).unaryPlus(frame.ensureScope())
+        frame.storeObjResult(dst, result)
+        return
+    }
+}
+
 class CmdAddObj(internal val a: Int, internal val b: Int, internal val dst: Int) : Cmd() {
     override suspend fun perform(frame: CmdFrame) {
         val result = frame.slotToObj(a).plus(frame.ensureScope(), frame.slotToObj(b))
@@ -4175,6 +4183,15 @@ class BytecodeLambdaCallable(
     private fun buildContext(callScope: Scope, args: Arguments): Scope {
         val context = callScope.applyClosureForBytecode(closureScope, preferredThisType).also {
             it.args = args
+        }
+        preferredThisType?.let { typeName ->
+            val receiverArg = args.list.firstOrNull { arg ->
+                arg.isInstanceOf(typeName) ||
+                    ((context[typeName]?.value as? ObjClass)?.let { typeClass -> arg.isInstanceOf(typeClass) } == true)
+            }
+            if (receiverArg != null && context.thisVariants.firstOrNull() !== receiverArg) {
+                context.setThisVariants(receiverArg, context.thisVariants)
+            }
         }
         if (captureRecords != null) {
             context.captureRecords = captureRecords

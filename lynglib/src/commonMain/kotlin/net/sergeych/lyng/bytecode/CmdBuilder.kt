@@ -143,7 +143,7 @@ class CmdBuilder {
             Opcode.UNBOX_INT_OBJ, Opcode.UNBOX_REAL_OBJ,
             Opcode.INT_TO_REAL, Opcode.REAL_TO_INT, Opcode.BOOL_TO_INT, Opcode.INT_TO_BOOL,
             Opcode.OBJ_TO_BOOL, Opcode.GET_OBJ_CLASS,
-            Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT,
+            Opcode.NEG_INT, Opcode.NEG_REAL, Opcode.NOT_BOOL, Opcode.INV_INT, Opcode.POS_OBJ,
             Opcode.ASSERT_IS ->
                 listOf(OperandKind.SLOT, OperandKind.SLOT)
             Opcode.CHECK_IS, Opcode.MAKE_QUALIFIED_VIEW ->
@@ -698,6 +698,7 @@ class CmdBuilder {
             } else {
                 CmdNotBool(operands[0], operands[1])
             }
+            Opcode.POS_OBJ -> CmdPosObj(operands[0], operands[1])
             Opcode.AND_BOOL -> if (isFastLocal(operands[0]) && isFastLocal(operands[1]) && isFastLocal(operands[2])) {
                 CmdAndBoolLocal(operands[0] - scopeSlotCount, operands[1] - scopeSlotCount, operands[2] - scopeSlotCount)
             } else {

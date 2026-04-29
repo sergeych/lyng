@@ -885,6 +885,19 @@ class Compiler(
         )
     }
 
+    private fun promotePreferredReceiverArg(context: Scope, preferredTypeName: String?) {
+        if (preferredTypeName == null) return
+        val receiverArg = context.args.list.firstOrNull { arg ->
+            arg.isInstanceOf(preferredTypeName) ||
+                ((context[preferredTypeName]?.value as? ObjClass)?.let { typeClass ->
+                    arg.isInstanceOf(typeClass)
+                } == true)
+        } ?: return
+        if (context.thisVariants.firstOrNull() !== receiverArg) {
+            context.setThisVariants(receiverArg, context.thisVariants)
+        }
+    }
+
     private fun currentImplicitReceiverTypeNames(): List<String> {
         val result = mutableListOf<String>()
         for (ctx in codeContexts.asReversed()) {
@@ -2010,6 +2023,7 @@ class Compiler(
                         callableReturnTypeByScopeId = callableReturnTypeByScopeId,
                         callableReturnTypeByName = callableReturnTypeByName,
                         callSignatureByName = callSignatureByName,
+                        extensionContextReceiversByWrapperName = extensionContextReceiversByWrapperName,
                         externBindingNames = externBindingNames,
                         preparedModuleBindingNames = importBindings.keys,
                         scopeRefPosByName = moduleReferencePosByName,
@@ -2078,19 +2092,60 @@ class Compiler(
     private val rangeParamNamesStack = mutableListOf<Set<String>>()
     private val extensionNames = mutableSetOf<String>()
     private val extensionNamesByType = mutableMapOf<String, MutableSet<String>>()
+    private val extensionContextReceiversByWrapperName = mutableMapOf<String, List<String>>()
     private val useScopeSlots: Boolean = seedScope == null
 
     private fun registerExtensionName(typeName: String, memberName: String) {
         extensionNamesByType.getOrPut(typeName) { mutableSetOf() }.add(memberName)
     }
 
+    private fun contextReceiverTypeName(typeDecl: TypeDecl): String? = when (typeDecl) {
+        is TypeDecl.Simple -> typeDecl.name.substringAfterLast('.')
+        is TypeDecl.Generic -> typeDecl.name.substringAfterLast('.')
+        else -> null
+    }
+
+    private fun contextReceiversSatisfied(required: List<String>, visibleReceivers: List<String> = currentImplicitReceiverTypeNames()): Boolean {
+        if (required.isEmpty()) return true
+        return required.all { req ->
+            visibleReceivers.any { visible ->
+                visible == req || resolveClassByName(visible)?.let { cls ->
+                    cls.className == req || cls.mro.any { it.className == req }
+                } == true
+            }
+        }
+    }
+
+    private fun rememberExtensionContextReceivers(wrapperName: String, record: ObjRecord) {
+        val fnType = record.typeDecl as? TypeDecl.Function ?: return
+        if (fnType.contextReceivers.isEmpty()) return
+        val names = fnType.contextReceivers.mapNotNull(::contextReceiverTypeName)
+        if (names.size == fnType.contextReceivers.size) {
+            extensionContextReceiversByWrapperName[wrapperName] = names
+        }
+    }
+
     private fun hasExtensionFor(typeName: String, memberName: String): Boolean {
-        if (extensionNamesByType[typeName]?.contains(memberName) == true) return true
+        if (extensionNamesByType[typeName]?.contains(memberName) == true) {
+            val wrapperName = extensionCallableName(typeName, memberName)
+            if (contextReceiversSatisfied(extensionContextReceiversByWrapperName[wrapperName].orEmpty())) return true
+            val getterName = extensionPropertyGetterName(typeName, memberName)
+            if (contextReceiversSatisfied(extensionContextReceiversByWrapperName[getterName].orEmpty())) return true
+            val setterName = extensionPropertySetterName(typeName, memberName)
+            if (contextReceiversSatisfied(extensionContextReceiversByWrapperName[setterName].orEmpty())) return true
+        }
         val scopeRec = seedScope?.get(typeName) ?: importManager.rootScope.get(typeName)
         val cls = (scopeRec?.value as? ObjClass) ?: resolveTypeDeclObjClass(TypeDecl.Simple(typeName, false))
         if (cls != null) {
             for (base in cls.mro) {
-                if (extensionNamesByType[base.className]?.contains(memberName) == true) return true
+                if (extensionNamesByType[base.className]?.contains(memberName) == true) {
+                    val wrapperName = extensionCallableName(base.className, memberName)
+                    if (contextReceiversSatisfied(extensionContextReceiversByWrapperName[wrapperName].orEmpty())) return true
+                    val getterName = extensionPropertyGetterName(base.className, memberName)
+                    if (contextReceiversSatisfied(extensionContextReceiversByWrapperName[getterName].orEmpty())) return true
+                    val setterName = extensionPropertySetterName(base.className, memberName)
+                    if (contextReceiversSatisfied(extensionContextReceiversByWrapperName[setterName].orEmpty())) return true
+                }
             }
         }
         val candidates = mutableListOf(typeName)
@@ -2102,7 +2157,10 @@ class Compiler(
                 extensionPropertySetterName(baseName, memberName)
             )
             for (wrapperName in wrapperNames) {
+                if (!contextReceiversSatisfied(extensionContextReceiversByWrapperName[wrapperName].orEmpty())) continue
                 val resolved = resolveImportBinding(wrapperName, Pos.builtIn) ?: continue
+                rememberExtensionContextReceivers(wrapperName, resolved.record)
+                if (!contextReceiversSatisfied(extensionContextReceiversByWrapperName[wrapperName].orEmpty())) continue
                 val plan = moduleSlotPlan()
                 if (plan != null && !plan.slots.containsKey(wrapperName)) {
                     declareSlotNameIn(
@@ -2385,6 +2443,7 @@ class Compiler(
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
             callSignatureByName = callSignatureByName,
+            extensionContextReceiversByWrapperName = extensionContextReceiversByWrapperName,
             externCallableNames = externCallableNames,
             externBindingNames = externBindingNames,
             preparedModuleBindingNames = importBindings.keys,
@@ -2420,6 +2479,7 @@ class Compiler(
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
             callSignatureByName = callSignatureByName,
+            extensionContextReceiversByWrapperName = extensionContextReceiversByWrapperName,
             externCallableNames = externCallableNames,
             externBindingNames = externBindingNames,
             preparedModuleBindingNames = importBindings.keys,
@@ -2480,6 +2540,7 @@ class Compiler(
             callableReturnTypeByScopeId = callableReturnTypeByScopeId,
             callableReturnTypeByName = callableReturnTypeByName,
             callSignatureByName = callSignatureByName,
+            extensionContextReceiversByWrapperName = extensionContextReceiversByWrapperName,
             externCallableNames = externCallableNames,
             externBindingNames = externBindingNames,
             preparedModuleBindingNames = importBindings.keys,
@@ -3721,7 +3782,7 @@ class Compiler(
         val inlineBodyRef = argsDeclaration?.let { null } ?: extractInlineLambdaBodyRef(body)
         val supportsDirectInvokeFastPath = bytecodeFn != null &&
             bytecodeFn.scopeSlotCount == 0 &&
-            expectedReceiverType == null &&
+            effectiveExpectedReceiverType == null &&
             !wrapAsExtensionCallable &&
             !containsDelegatedRefs(body)
         val ref = LambdaFnRef(
@@ -3733,9 +3794,10 @@ class Compiler(
                 override fun bytecodeBody(): BytecodeStatement? = fnStatements as? BytecodeStatement
 
                 override fun callOnFast(scope: Scope): Obj? {
-                    val context = scope.applyClosureForBytecode(closureScope, preferredThisType = expectedReceiverType).also {
+                    val context = scope.applyClosureForBytecode(closureScope, preferredThisType = effectiveExpectedReceiverType).also {
                         it.args = scope.args
                     }
+                    promotePreferredReceiverArg(context, effectiveExpectedReceiverType)
                     if (captureSlots.isNotEmpty()) {
                         if (captureRecords != null) {
                             context.captureRecords = captureRecords
@@ -3804,9 +3866,10 @@ class Compiler(
                 }
 
                 override suspend fun execute(scope: Scope): Obj {
-                    val context = scope.applyClosureForBytecode(closureScope, preferredThisType = expectedReceiverType).also {
+                    val context = scope.applyClosureForBytecode(closureScope, preferredThisType = effectiveExpectedReceiverType).also {
                         it.args = scope.args
                     }
+                    promotePreferredReceiverArg(context, effectiveExpectedReceiverType)
                     if (captureSlots.isNotEmpty()) {
                         if (captureRecords != null) {
                             context.captureRecords = captureRecords
@@ -5321,6 +5384,7 @@ class Compiler(
         is RangeRef -> ObjRange.type
         is ClassOperatorRef -> ObjClassType
         is CastRef -> resolveTypeRefClass(ref.castTypeRef())
+        is UnaryOpRef -> inferUnaryOpReturnClass(ref)
         is IndexRef -> {
             val targetClass = resolveReceiverClassForMember(ref.targetRef)
             classMethodReturnClass(targetClass, "getAt")
@@ -5439,6 +5503,7 @@ class Compiler(
                     ?: resolveClassByName(ref.receiverTypeName())?.let { classMethodReturnTypeDecl(it, ref.methodName()) }
             }
             is CallRef -> callReturnTypeDeclByRef[ref] ?: inferCallReturnTypeDecl(ref)
+            is UnaryOpRef -> inferUnaryOpReturnTypeDecl(ref)
             is BinaryOpRef -> inferBinaryOpReturnTypeDecl(ref)
             is ElvisRef -> inferElvisTypeDecl(ref)
             is StatementRef -> (ref.statement as? ExpressionStatement)?.let { resolveReceiverTypeDecl(it.ref) }
@@ -5513,6 +5578,7 @@ class Compiler(
             is QualifiedThisMethodSlotCallRef ->
                 inferMethodCallReturnClass(resolveClassByName(ref.receiverTypeName()), ref.methodName())
             is CallRef -> inferCallReturnTypeDecl(ref)?.let { resolveTypeDeclObjClass(it) } ?: inferCallReturnClass(ref)
+            is UnaryOpRef -> inferUnaryOpReturnClass(ref)
             is BinaryOpRef -> inferBinaryOpReturnClass(ref)
             is FieldRef -> {
                 val targetClass = resolveReceiverClassForMember(ref.target)
@@ -5537,6 +5603,13 @@ class Compiler(
         BinOp.SLASH -> "div"
         BinOp.PERCENT -> "mod"
         else -> null
+    }
+
+    private fun unaryOpMethodName(op: UnaryOp): String? = when (op) {
+        UnaryOp.POSITIVE -> "unaryPlus"
+        UnaryOp.NEGATE -> "negate"
+        UnaryOp.BITNOT -> "bitNot"
+        UnaryOp.NOT -> null
     }
 
     private fun interopOperatorFor(op: BinOp): InteropOperator? = when (op) {
@@ -5612,6 +5685,67 @@ class Compiler(
                 if (leftIsInt && rightIsInt) intType else null
             else -> null
         }
+    }
+
+    private fun inferExtensionMethodReturnTypeDecl(
+        receiverDecl: TypeDecl?,
+        receiverClass: ObjClass?,
+        memberName: String
+    ): TypeDecl? {
+        if (receiverClass == null) return null
+        for (cls in receiverClass.mro) {
+            val wrapperName = extensionCallableName(cls.className, memberName)
+            val resolved = resolveImportBinding(wrapperName, Pos.builtIn) ?: continue
+            registerImportBinding(wrapperName, resolved.binding, Pos.builtIn)
+            val wrapperType = resolved.record.typeDecl as? TypeDecl.Function ?: continue
+            val bindings = mutableMapOf<String, TypeDecl>()
+            val receiverParam = wrapperType.params.firstOrNull() ?: wrapperType.receiver
+            if (receiverParam != null && receiverDecl != null) {
+                collectTypeVarBindings(receiverParam, receiverDecl, bindings)
+            }
+            return if (bindings.isEmpty()) wrapperType.returnType
+            else substituteTypeAliasTypeVars(wrapperType.returnType, bindings)
+        }
+        return null
+    }
+
+    private fun inferUnaryOpReturnTypeDecl(ref: UnaryOpRef): TypeDecl? {
+        val operandDecl = resolveReceiverTypeDecl(ref.a)
+        val operandClass = resolveReceiverClassForMember(ref.a) ?: inferObjClassFromRef(ref.a)
+        return when (ref.op) {
+            UnaryOp.NOT -> typeDeclOfClass(ObjBool.type)
+            UnaryOp.POSITIVE -> {
+                unaryOpMethodName(ref.op)?.let { methodName ->
+                    classMethodReturnTypeDecl(operandClass, methodName)?.let { return it }
+                    inferExtensionMethodReturnTypeDecl(operandDecl, operandClass, methodName)?.let { return it }
+                }
+                operandDecl ?: operandClass?.let(::typeDeclOfClass)
+            }
+            UnaryOp.NEGATE -> when (operandClass) {
+                ObjInt.type -> typeDeclOfClass(ObjInt.type)
+                ObjReal.type -> typeDeclOfClass(ObjReal.type)
+                else -> unaryOpMethodName(ref.op)?.let { methodName ->
+                    classMethodReturnTypeDecl(operandClass, methodName)
+                        ?: inferExtensionMethodReturnTypeDecl(operandDecl, operandClass, methodName)
+                }
+            }
+            UnaryOp.BITNOT -> when (operandClass) {
+                ObjInt.type -> typeDeclOfClass(ObjInt.type)
+                else -> unaryOpMethodName(ref.op)?.let { methodName ->
+                    classMethodReturnTypeDecl(operandClass, methodName)
+                        ?: inferExtensionMethodReturnTypeDecl(operandDecl, operandClass, methodName)
+                }
+            }
+        }
+    }
+
+    private fun inferUnaryOpReturnClass(ref: UnaryOpRef): ObjClass? {
+        inferUnaryOpReturnTypeDecl(ref)?.let { declared ->
+            resolveTypeDeclObjClass(declared)?.let { return it }
+            if (declared is TypeDecl.TypeVar) return Obj.rootObjectType
+        }
+        val operandClass = resolveReceiverClassForMember(ref.a) ?: inferObjClassFromRef(ref.a)
+        return if (ref.op == UnaryOp.POSITIVE) operandClass else null
     }
 
     private fun inferBinaryOpReturnClass(ref: BinaryOpRef): ObjClass? {
@@ -7439,6 +7573,7 @@ class Compiler(
             is FastLocalVarRef -> nameObjClass[ref.name]?.className
                 ?: nameTypeDecl[ref.name]?.let { typeDeclName(it) }
             is QualifiedThisRef -> ref.typeName
+            is UnaryOpRef -> inferUnaryOpReturnClass(ref)?.className
             else -> resolveReceiverClassForMember(ref)?.className
         }
     }
@@ -7458,8 +7593,12 @@ class Compiler(
             Token.Type.CHAR -> ConstRef(ObjChar(t.value[0]).asReadonly)
 
             Token.Type.PLUS -> {
-                val n = parseNumber(true)
-                ConstRef(n.asReadonly)
+                parseNumberOrNull(true)?.let { n ->
+                    ConstRef(n.asReadonly)
+                } ?: run {
+                    val n = parseTerm() ?: throw ScriptError(t.pos, "Expecting expression after unary plus")
+                    UnaryOpRef(UnaryOp.POSITIVE, n)
+                }
             }
 
             Token.Type.MINUS -> {
@@ -7655,6 +7794,43 @@ class Compiler(
         }
     }
 
+    private fun parseContextReceiverDeclarationList(start: Pos): List<TypeDecl> {
+        if (!cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true)) {
+            throw ScriptError(start, "expected '(' after context")
+        }
+        val receivers = mutableListOf<TypeDecl>()
+        cc.skipWsTokens()
+        if (cc.peekNextNonWhitespace().type == Token.Type.RPAREN) {
+            cc.nextNonWhitespace()
+            return receivers
+        }
+        while (true) {
+            val (decl, _) = parseTypeExpressionWithMini()
+            receivers += decl
+            val sep = cc.nextNonWhitespace()
+            when (sep.type) {
+                Token.Type.COMMA -> continue
+                Token.Type.RPAREN -> return receivers
+                else -> sep.raiseSyntax("expected ',' or ')' in context receiver list")
+            }
+        }
+    }
+
+    private suspend fun parseContextFunctionDeclaration(contextToken: Token): Statement {
+        val contextReceivers = parseContextReceiverDeclarationList(contextToken.pos)
+        val fn = cc.nextNonWhitespace()
+        if (fn.type != Token.Type.ID || (fn.value != "fun" && fn.value != "fn")) {
+            throw ScriptError(fn.pos, "context receivers are currently supported only on function declarations")
+        }
+        pendingDeclStart = contextToken.pos
+        pendingDeclDoc = consumePendingDoc()
+        return parseFunctionDeclaration(
+            isExtern = false,
+            isStatic = false,
+            contextReceiverTypeDecls = contextReceivers
+        )
+    }
+
     /**
      * Parse keyword-starting statement.
      * @return parsed statement or null if, for example. [id] is not among keywords
@@ -7693,6 +7869,7 @@ class Compiler(
             pendingDeclDoc = consumePendingDoc()
             parseFunctionDeclaration(isExtern = false, isStatic = false)
         }
+        "context" -> parseContextFunctionDeclaration(id)
         // Visibility modifiers for declarations: private/protected val/var/fun/fn
         "while" -> parseWhileStatement()
         "do" -> parseDoWhileStatement()
@@ -9648,7 +9825,8 @@ class Compiler(
         isOverride: Boolean = false,
         isExtern: Boolean = false,
         isStatic: Boolean = false,
-        isTransient: Boolean = isTransientFlag
+        isTransient: Boolean = isTransientFlag,
+        contextReceiverTypeDecls: List<TypeDecl> = emptyList()
     ): Statement {
         isTransientFlag = false
         val declarationAnnotationSpecs = pendingDeclAnnotations.toList()
@@ -9688,7 +9866,17 @@ class Compiler(
                 )
             }
             registerExtensionName(extTypeName, name)
+            if (contextReceiverTypeDecls.isNotEmpty()) {
+                val contextNames = contextReceiverTypeDecls.mapNotNull(::contextReceiverTypeName)
+                if (contextNames.size != contextReceiverTypeDecls.size) {
+                    throw ScriptError(start, "context receiver types for extension functions must be class-like")
+                }
+                extensionContextReceiversByWrapperName[extensionCallableName(extTypeName, name)] = contextNames
+            }
         } else {
+            if (contextReceiverTypeDecls.isNotEmpty()) {
+                throw ScriptError(start, "context receivers are currently supported only on extension functions")
+            }
             val t = cc.next()
             if (t.type != Token.Type.ID)
                 throw ScriptError(t.pos, "Expected identifier after 'fun'")
@@ -9774,6 +9962,7 @@ class Compiler(
         if (parentContext is CodeContext.ClassBody && !isStatic && extTypeName == null) {
             classMemberTypeDeclByName.getOrPut(parentContext.name) { mutableMapOf() }[name] = TypeDecl.Function(
                 receiver = receiverTypeDecl,
+                contextReceivers = contextReceiverTypeDecls,
                 params = argsDeclaration.params.map { it.type },
                 returnType = returnTypeDecl ?: TypeDecl.TypeAny,
                 nullable = false
@@ -9851,7 +10040,7 @@ class Compiler(
             CodeContext.Function(
                 name,
                 implicitThisMembers = implicitThisMembers,
-                implicitReceiverTypeNames = listOfNotNull(implicitThisTypeName),
+                implicitReceiverTypeNames = listOfNotNull(implicitThisTypeName) + contextReceiverTypeDecls.mapNotNull(::contextReceiverTypeName),
                 typeParams = typeParams,
                 typeParamDecls = typeParamDecls,
                 noImplicitThis = noImplicitThis
@@ -9949,6 +10138,7 @@ class Compiler(
                 run {
                     val memberTypeDecl = TypeDecl.Function(
                         receiver = receiverTypeDecl,
+                        contextReceivers = contextReceiverTypeDecls,
                         params = argsDeclaration.params.map { it.type },
                         returnType = inferredReturnDecl ?: TypeDecl.TypeAny,
                         nullable = false
@@ -10062,7 +10252,7 @@ class Compiler(
                             }
                         }
                         if (extTypeName != null) {
-                            context.thisObj = scope.thisObj
+                            context.setThisVariants(scope.thisObj, context.thisVariants)
                         }
                         val localNames = frame.fn.localSlotNames
                         for (i in localNames.indices) {
@@ -10145,6 +10335,7 @@ class Compiler(
                 annotation = annotation,
                 typeDecl = if (isDelegated) null else TypeDecl.Function(
                     receiver = receiverTypeDecl,
+                    contextReceivers = contextReceiverTypeDecls,
                     params = argsDeclaration.params.map { it.type },
                     returnType = inferredReturnDecl ?: TypeDecl.TypeAny,
                     nullable = false
@@ -11644,6 +11835,7 @@ class Compiler(
             val a = constOf(aRef) ?: return null
             return when (op) {
                 UnaryOp.NOT -> if (a is ObjBool) if (!a.value) ObjTrue else ObjFalse else null
+                UnaryOp.POSITIVE -> a
                 UnaryOp.NEGATE -> when (a) {
                     is ObjInt -> ObjInt.of(-a.value)
                     is ObjReal -> ObjReal.of(-a.value)

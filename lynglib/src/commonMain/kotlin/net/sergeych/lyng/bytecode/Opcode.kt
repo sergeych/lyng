@@ -144,6 +144,7 @@ enum class Opcode(val code: Int) {
     MOD_OBJ(0x7B),
     CONTAINS_OBJ(0x7C),
     ASSIGN_OP_OBJ(0x7D),
+    POS_OBJ(0x7E),
 
     JMP(0x80),
     JMP_IF_TRUE(0x81),

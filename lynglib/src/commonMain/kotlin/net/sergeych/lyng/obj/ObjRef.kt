@@ -73,7 +73,7 @@ class ClassOperatorRef(val target: ObjRef, val pos: Pos) : ObjRef {
 }
 
 /** Unary operations supported by ObjRef. */
-enum class UnaryOp { NOT, NEGATE, BITNOT }
+enum class UnaryOp { NOT, POSITIVE, NEGATE, BITNOT }
 
 /** Binary operations supported by ObjRef. */
 enum class BinOp {

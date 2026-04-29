@@ -317,6 +317,12 @@ open class Obj {
         }
     }
 
+    open suspend fun unaryPlus(scope: Scope): Obj {
+        return invokeInstanceMethod(scope, "unaryPlus", Arguments.EMPTY) {
+            this
+        }
+    }
+
     open suspend fun mul(scope: Scope, other: Obj): Obj {
         val otherValue = when (other) {
             is FrameSlotRef -> other.read()

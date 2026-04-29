@@ -1,0 +1,50 @@
+class Tag(name: String) {
+    val name = name
+    var inner = ""
+
+    fun child(tagName: String, block: Tag.()->void) {
+        val child = Tag(tagName)
+        with(child) { block(this) }
+        inner += child.render()
+    }
+
+    fun head(block: Tag.()->void) { child("head", block) }
+    fun body(block: Tag.()->void) { child("body", block) }
+    fun title(block: Tag.()->void) { child("title", block) }
+    fun h1(block: Tag.()->void) { child("h1", block) }
+
+    fun addText(text: String) {
+        inner += text
+    }
+
+    fun render() {
+        "<" + name + ">" + inner + "</" + name + ">"
+    }
+}
+
+context(Tag)
+fun String.unaryPlus() {
+    this@Tag.addText(this)
+}
+
+fun html(block: Tag.()->void) {
+    val root = Tag("html")
+    with(root) { block(this) }
+    root.render()
+}
+
+val page = html {
+    head {
+        title {
+            +"Demo"
+        }
+    }
+    body {
+        h1 {
+            +"Heading 1"
+        }
+    }
+}
+
+println(page)
+assertEquals("<html><head><title>Demo</title></head><body><h1>Heading 1</h1></body></html>", page)
