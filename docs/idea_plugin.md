@@ -27,6 +27,6 @@ See `docs/lyng_d_files.md` for `.lyng.d` syntax and examples.
 - Alternatively, if/when the plugin is published to a marketplace, you will be able to install it
   directly from the “Marketplace” tab (not yet available).
 
-### [Download plugin v0.0.2-SNAPSHOT](https://lynglang.com/distributables/lyng-idea-0.0.2-SNAPSHOT.zip)
+### [Download plugin v0.0.5-SNAPSHOT](https://lynglang.com/distributables/lyng-idea-0.0.5-SNAPSHOT.zip)
 
 Your ideas and bugreports are welcome on the [project gitea page](https://gitea.sergeych.net/SergeychWorks/lyng/issues)

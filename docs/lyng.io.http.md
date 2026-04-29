@@ -1,4 +1,4 @@
-### lyng.io.http — HTTP/HTTPS client for Lyng scripts
+# lyng.io.http — HTTP/HTTPS client for Lyng scripts
 
 This module provides a compact HTTP client API for Lyng scripts. It is implemented in `lyngio` and backed by Ktor on supported runtimes.
 
@@ -8,7 +8,7 @@ This module provides a compact HTTP client API for Lyng scripts. It is implement
 
 ---
 
-#### Add the library to your project (Gradle)
+## Add the library to your project (Gradle)
 
 If you use this repository as a multi-module project, add a dependency on `:lyngio`:
 
@@ -22,7 +22,7 @@ For external projects, ensure you also use the Lyng Maven repository described i
 
 ---
 
-#### Install the module into a Lyng session
+## Install the module into a Lyng session
 
 The HTTP module is not installed automatically. Install it into the session scope and provide a policy.
 
@@ -44,7 +44,7 @@ suspend fun bootstrapHttp() {
 
 ---
 
-#### Using from Lyng scripts
+## Using from Lyng scripts
 
 Simple GET:
 
@@ -86,9 +86,9 @@ HTTPS GET:
 
 ---
 
-#### API reference
+## API reference
 
-##### `Http` (static methods)
+### `Http` (static methods)
 
 - `isSupported(): Bool` — Whether HTTP client support is available on the current runtime.
 - `request(req: HttpRequest): HttpResponse` — Execute a request described by a mutable request object.
@@ -101,7 +101,7 @@ For convenience methods, `headers...` accepts:
 - `MapEntry`, e.g. `"Accept" => "text/plain"`
 - 2-item lists, e.g. `["Accept", "text/plain"]`
 
-##### `HttpRequest`
+### `HttpRequest`
 
 - `method: String`
 - `url: String`
@@ -112,7 +112,7 @@ For convenience methods, `headers...` accepts:
 
 Only one of `bodyText` and `bodyBytes` should be set.
 
-##### `HttpResponse`
+### `HttpResponse`
 
 - `status: Int`
 - `statusText: String`
@@ -122,7 +122,7 @@ Only one of `bodyText` and `bodyBytes` should be set.
 
 Response body decoding is cached inside the response object.
 
-##### `HttpHeaders`
+### `HttpHeaders`
 
 `HttpHeaders` behaves like `Map<String, String>` for the first value of each header name and additionally exposes:
 
@@ -134,7 +134,7 @@ Header lookup is case-insensitive.
 
 ---
 
-#### Security policy
+## Security policy
 
 The module uses `HttpAccessPolicy` to authorize requests before they are sent.
 
@@ -170,7 +170,7 @@ val allowLocalOnly = object : HttpAccessPolicy {
 
 ---
 
-#### Platform support
+## Platform support
 
 - **JVM:** supported
 - **Android:** supported via the Ktor CIO client backend
