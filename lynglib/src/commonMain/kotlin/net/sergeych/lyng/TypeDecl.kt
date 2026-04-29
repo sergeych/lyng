@@ -26,6 +26,7 @@ sealed class TypeDecl(val isNullable:Boolean = false) {
     // ??
     data class Function(
         val receiver: TypeDecl?,
+        val contextReceivers: List<TypeDecl> = emptyList(),
         val params: List<TypeDecl>,
         val returnType: TypeDecl,
         val nullable: Boolean = false

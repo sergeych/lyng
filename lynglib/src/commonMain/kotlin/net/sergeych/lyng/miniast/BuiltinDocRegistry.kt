@@ -36,6 +36,7 @@ data class TypeNameDoc(val segments: List<String>, override val nullable: Boolea
 data class TypeGenericDoc(val base: TypeNameDoc, val args: List<TypeDoc>, override val nullable: Boolean = false) : TypeDoc
 data class TypeFunctionDoc(
     val receiver: TypeDoc? = null,
+    val contextReceivers: List<TypeDoc> = emptyList(),
     val params: List<TypeDoc>,
     val returns: TypeDoc,
     override val nullable: Boolean = false
@@ -45,8 +46,13 @@ data class TypeVarDoc(val name: String, override val nullable: Boolean = false) 
 // Convenience builders
 fun type(name: String, nullable: Boolean = false) = TypeNameDoc(name.split('.'), nullable)
 fun typeVar(name: String, nullable: Boolean = false) = TypeVarDoc(name, nullable)
-fun funType(params: List<TypeDoc>, returns: TypeDoc, receiver: TypeDoc? = null, nullable: Boolean = false) =
-    TypeFunctionDoc(receiver, params, returns, nullable)
+fun funType(
+    params: List<TypeDoc>,
+    returns: TypeDoc,
+    receiver: TypeDoc? = null,
+    contextReceivers: List<TypeDoc> = emptyList(),
+    nullable: Boolean = false
+) = TypeFunctionDoc(receiver, contextReceivers, params, returns, nullable)
 
 // ---------------- Registry ----------------
 
@@ -281,6 +287,7 @@ internal fun TypeDoc.toMiniTypeRef(): MiniTypeRef = when (this) {
     is TypeFunctionDoc -> MiniFunctionType(
         range = builtinRange(),
         receiver = this.receiver?.toMiniTypeRef(),
+        contextReceivers = this.contextReceivers.map { it.toMiniTypeRef() },
         params = this.params.map { it.toMiniTypeRef() },
         returnType = this.returns.toMiniTypeRef(),
         nullable = this.nullable

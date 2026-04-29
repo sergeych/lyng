@@ -454,6 +454,31 @@ Key rules and features:
   - For arbitrary receivers, use casts: `(expr as Type).member(...)` or `(expr as? Type)?.member(...)`.
   - Qualified access does not relax visibility.
 
+### Receiver-stack lambdas
+
+Qualified `this@Type` is also used outside inheritance when a lambda has multiple visible receivers.
+This is common in DSL-style builders.
+
+- `A & B` means one receiver value that implements both types.
+- `context(A, B) C.()->R` means a receiver stack:
+  - primary `this` is `C`
+  - outer/context receivers are `A`, then `B`
+- Unqualified lookup checks the primary receiver first.
+- If the primary receiver does not define a member and several outer/context receivers do, Lyng reports a compile-time ambiguity. Use `this@Type` to select one explicitly.
+
+Example:
+
+```lyng
+class Html { fun title() = "html" }
+class Head { fun title() = "head" }
+class Body
+
+val block: context(Html, Head) Body.()->String = {
+    // title()         // compile-time ambiguity: Html vs Head
+    this@Html.title()
+}
+```
+
 - Field inheritance (`val`/`var`) and collisions
   - Instance storage is kept per declaring class, internally disambiguated; unqualified read/write resolves to the first match in the resolution order (leftmost base).
   - Qualified read/write (via `this@Type` or casts) targets the chosen ancestor’s storage.

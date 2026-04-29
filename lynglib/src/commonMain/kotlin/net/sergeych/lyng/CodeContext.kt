@@ -22,13 +22,16 @@ sealed class CodeContext {
     class Function(
         val name: String,
         val implicitThisMembers: Boolean = false,
-        val implicitThisTypeName: String? = null,
+        val implicitReceiverTypeNames: List<String> = emptyList(),
         val typeParams: Set<String> = emptySet(),
         val typeParamDecls: List<TypeDecl.TypeParam> = emptyList(),
         /** True for static methods and top-level functions: they have no implicit `this`,
          *  so class-body field initializers inside them should not inherit the class name. */
         val noImplicitThis: Boolean = false
-    ): CodeContext()
+    ): CodeContext() {
+        val implicitThisTypeName: String?
+            get() = implicitReceiverTypeNames.firstOrNull()
+    }
     class ClassBody(val name: String, val isExtern: Boolean = false): CodeContext() {
         var typeParams: Set<String> = emptySet()
         var typeParamDecls: List<TypeDecl.TypeParam> = emptyList()

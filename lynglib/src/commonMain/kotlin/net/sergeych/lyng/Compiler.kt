@@ -857,32 +857,83 @@ class Compiler(
         return signature?.tailBlockReceiverType ?: if (name == "flow") "FlowBuilder" else null
     }
 
-    private fun currentImplicitThisTypeName(): String? {
+    private fun mergeReceiverTypeNames(vararg groups: Iterable<String?>): List<String> {
+        val result = mutableListOf<String>()
+        for (group in groups) {
+            for (typeName in group) {
+                val normalized = typeName?.takeIf { it.isNotBlank() } ?: continue
+                if (!result.contains(normalized)) {
+                    result += normalized
+                }
+            }
+        }
+        return result
+    }
+
+    private fun typeDeclReceiverTypeNames(typeDecl: TypeDecl.Function?): List<String> {
+        if (typeDecl == null) return emptyList()
+
+        fun receiverTypeName(typeDecl: TypeDecl?): String? = when (typeDecl) {
+            is TypeDecl.Simple -> typeDecl.name
+            is TypeDecl.Generic -> typeDecl.name
+            else -> null
+        }
+
+        return mergeReceiverTypeNames(
+            listOf(receiverTypeName(typeDecl.receiver)),
+            typeDecl.contextReceivers.map(::receiverTypeName)
+        )
+    }
+
+    private fun currentImplicitReceiverTypeNames(): List<String> {
+        val result = mutableListOf<String>()
         for (ctx in codeContexts.asReversed()) {
             when (ctx) {
                 is CodeContext.Function -> {
-                    if (ctx.implicitThisTypeName != null) return ctx.implicitThisTypeName
+                    result.addAll(
+                        ctx.implicitReceiverTypeNames.filter { typeName ->
+                            typeName.isNotBlank() && !result.contains(typeName)
+                        }
+                    )
                     // A static method or top-level function explicitly has no implicit `this`.
                     // Stop here — do not fall through to an enclosing ClassBody.
-                    if (ctx.noImplicitThis) return null
+                    if (ctx.noImplicitThis) return result
                 }
                 // Class field initializers are compiled directly under ClassBody with no wrapping
                 // Function. Lambdas inside those initializers must still see `this` as the class.
-                is CodeContext.ClassBody -> return ctx.name
+                is CodeContext.ClassBody -> {
+                    if (!result.contains(ctx.name)) {
+                        result += ctx.name
+                    }
+                    return result
+                }
                 else -> {}
             }
         }
-        return null
+        return result
     }
 
-    private fun implicitReceiverTypeForMember(name: String): String? {
-        for (ctx in codeContexts.asReversed()) {
-            val fn = ctx as? CodeContext.Function ?: continue
-            if (!fn.implicitThisMembers) continue
-            val typeName = fn.implicitThisTypeName ?: continue
-            if (hasImplicitThisMember(name, typeName)) return typeName
+    private fun currentImplicitThisTypeName(): String? {
+        return currentImplicitReceiverTypeNames().firstOrNull()
+    }
+
+    private fun implicitReceiverTypeForMember(name: String, pos: Pos? = null): String? {
+        val visibleReceivers = currentImplicitReceiverTypeNames()
+        if (visibleReceivers.isEmpty()) return null
+        val matching = visibleReceivers.filter { hasImplicitThisMember(name, it) }
+        if (matching.isEmpty()) return null
+
+        val primary = visibleReceivers.firstOrNull()
+        if (primary != null && matching.first() == primary) {
+            return primary
         }
-        return null
+        if (matching.size > 1 && pos != null) {
+            throw ScriptError(
+                pos,
+                "member '$name' is ambiguous between receivers ${matching.joinToString(", ")}; use this@Type to disambiguate"
+            )
+        }
+        return matching.first()
     }
 
     private fun currentEnclosingClassName(): String? {
@@ -1151,10 +1202,11 @@ class Compiler(
         val classCtx = codeContexts.lastOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
         if (classCtx != null && classCtx.declaredMembers.contains(name)) {
             resolutionSink?.referenceMember(name, pos)
-            val ids = resolveMemberIds(name, pos, null)
-            return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, currentImplicitThisTypeName())
+            val implicitType = implicitReceiverTypeForMember(name, pos) ?: classCtx.name
+            val ids = resolveImplicitThisMemberIds(name, pos, implicitType)
+            return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, implicitType)
         }
-        val implicitTypeFromFunc = implicitReceiverTypeForMember(name)
+        val implicitTypeFromFunc = implicitReceiverTypeForMember(name, pos)
         val hasImplicitClassMember = classCtx != null && hasImplicitThisMember(name, classCtx.name)
         if (implicitTypeFromFunc == null && !hasImplicitClassMember) {
             val modulePlan = moduleSlotPlan()
@@ -1277,7 +1329,7 @@ class Compiler(
             if (hasImplicitThisMember(name, implicitType)) {
                 resolutionSink?.referenceMember(name, pos, implicitType)
                 val ids = resolveImplicitThisMemberIds(name, pos, implicitType)
-                val preferredType = if (currentImplicitThisTypeName() == null) null else implicitType
+                val preferredType = if (currentImplicitReceiverTypeNames().isEmpty()) null else implicitType
                 return ImplicitThisMemberRef(name, pos, ids.fieldId, ids.methodId, preferredType)
             }
         }
@@ -1687,6 +1739,7 @@ class Compiler(
             )
             is TypeDecl.Function -> TypeDecl.Function(
                 receiver = decl.receiver?.let { transform(it) },
+                contextReceivers = decl.contextReceivers.map { transform(it) },
                 params = decl.params.map { transform(it) },
                 returnType = transform(decl.returnType),
                 nullable = decl.isNullable
@@ -3498,13 +3551,12 @@ class Compiler(
         implicitItType: TypeDecl? = null,
         expectedCallableType: TypeDecl.Function? = null
     ): ObjRef {
-        fun receiverTypeName(typeDecl: TypeDecl?): String? = when (typeDecl) {
-            is TypeDecl.Simple -> typeDecl.name
-            is TypeDecl.Generic -> typeDecl.name
-            else -> null
-        }
-
-        val effectiveExpectedReceiverType = expectedReceiverType ?: receiverTypeName(expectedCallableType?.receiver)
+        val effectiveImplicitReceiverTypes = mergeReceiverTypeNames(
+            listOf(expectedReceiverType),
+            typeDeclReceiverTypeNames(expectedCallableType),
+            currentImplicitReceiverTypeNames()
+        )
+        val effectiveExpectedReceiverType = effectiveImplicitReceiverTypes.firstOrNull()
         // lambda args are different:
         val startPos = cc.currentPos()
         val label = lastLabel
@@ -3572,7 +3624,7 @@ class Compiler(
                 CodeContext.Function(
                     "<lambda>",
                     implicitThisMembers = true,
-                    implicitThisTypeName = effectiveExpectedReceiverType
+                    implicitReceiverTypeNames = effectiveImplicitReceiverTypes
                 )
             ) {
                 val returnLabels = label?.let { setOf(it) } ?: emptySet()
@@ -3834,6 +3886,7 @@ class Compiler(
         )
         val lambdaTypeDecl = TypeDecl.Function(
             receiver = effectiveExpectedReceiverType?.let { TypeDecl.Simple(it, false) },
+            contextReceivers = effectiveImplicitReceiverTypes.drop(1).map { TypeDecl.Simple(it, false) },
             params = lambdaParamTypeDecls.toList(),
             returnType = inferredReturnDecl ?: returnClass?.let { TypeDecl.Simple(it.className, false) } ?: TypeDecl.TypeAny,
             nullable = false
@@ -4247,9 +4300,10 @@ class Compiler(
             }
             is TypeDecl.Function -> {
                 val receiver = type.receiver?.let { expandTypeAliases(it, pos, seen) }
+                val contextReceivers = type.contextReceivers.map { expandTypeAliases(it, pos, seen) }
                 val params = type.params.map { expandTypeAliases(it, pos, seen) }
                 val ret = expandTypeAliases(type.returnType, pos, seen)
-                TypeDecl.Function(receiver, params, ret, type.nullable)
+                TypeDecl.Function(receiver, contextReceivers, params, ret, type.nullable)
             }
             is TypeDecl.Ellipsis -> {
                 val elem = expandTypeAliases(type.elementType, pos, seen)
@@ -4336,9 +4390,10 @@ class Compiler(
             }
             is TypeDecl.Function -> {
                 val receiver = type.receiver?.let { substituteTypeAliasTypeVars(it, bindings) }
+                val contextReceivers = type.contextReceivers.map { substituteTypeAliasTypeVars(it, bindings) }
                 val params = type.params.map { substituteTypeAliasTypeVars(it, bindings) }
                 val ret = substituteTypeAliasTypeVars(type.returnType, bindings)
-                TypeDecl.Function(receiver, params, ret, type.nullable)
+                TypeDecl.Function(receiver, contextReceivers, params, ret, type.nullable)
             }
             is TypeDecl.Ellipsis -> {
                 val elem = substituteTypeAliasTypeVars(type.elementType, bindings)
@@ -4480,6 +4535,35 @@ class Compiler(
 
         var receiverDecl: TypeDecl? = null
         var receiverMini: MiniTypeRef? = null
+        val contextReceivers = mutableListOf<Pair<TypeDecl, MiniTypeRef>>()
+
+        run {
+            val contextSaved = cc.savePos()
+            val contextToken = cc.peekNextNonWhitespace()
+            if (contextToken.type != Token.Type.ID || contextToken.value != "context") {
+                return@run
+            }
+            cc.nextNonWhitespace()
+            if (!cc.skipTokenOfType(Token.Type.LPAREN, isOptional = true)) {
+                cc.restorePos(contextSaved)
+                return@run
+            }
+            cc.skipWsTokens()
+            if (cc.peekNextNonWhitespace().type != Token.Type.RPAREN) {
+                while (true) {
+                    val parsed = parseTypeExpressionWithMini()
+                    contextReceivers += parsed
+                    val sep = cc.nextNonWhitespace()
+                    when (sep.type) {
+                        Token.Type.COMMA -> continue
+                        Token.Type.RPAREN -> break
+                        else -> sep.raiseSyntax("expected ',' or ')' in context receiver list")
+                    }
+                }
+            } else {
+                cc.nextNonWhitespace()
+            }
+        }
 
         val first = cc.peekNextNonWhitespace()
         if (first.type == Token.Type.LPAREN) {
@@ -4524,12 +4608,14 @@ class Compiler(
         val mini = MiniFunctionType(
             range = MiniRange(rangeStart, rangeEnd),
             receiver = normalizedReceiverMini,
+            contextReceivers = contextReceivers.map { it.second },
             params = params.map { it.second },
             returnType = retMini,
             nullable = isNullable
         )
         val sem = TypeDecl.Function(
             receiver = normalizedReceiverDecl,
+            contextReceivers = contextReceivers.map { it.first },
             params = params.map { it.first },
             returnType = retDecl,
             nullable = isNullable
@@ -5100,7 +5186,17 @@ class Compiler(
         TypeDecl.TypeNullableAny -> "Any?"
         is TypeDecl.Simple -> "S:${type.name}"
         is TypeDecl.Generic -> "G:${type.name}<${type.args.joinToString(",") { typeDeclKey(it) }}>"
-        is TypeDecl.Function -> "F:(${type.params.joinToString(",") { typeDeclKey(it) }})->${typeDeclKey(type.returnType)}"
+        is TypeDecl.Function -> buildString {
+            append("F:")
+            type.receiver?.let { append("recv=").append(typeDeclKey(it)).append(";") }
+            if (type.contextReceivers.isNotEmpty()) {
+                append("ctx=").append(type.contextReceivers.joinToString(",") { typeDeclKey(it) }).append(";")
+            }
+            append('(')
+            append(type.params.joinToString(",") { typeDeclKey(it) })
+            append(")->")
+            append(typeDeclKey(type.returnType))
+        }
         is TypeDecl.Ellipsis -> "E:${typeDeclKey(type.elementType)}"
         is TypeDecl.TypeVar -> "V:${type.name}"
         is TypeDecl.Union -> "U:${type.options.joinToString("|") { typeDeclKey(it) }}"
@@ -5793,6 +5889,14 @@ class Compiler(
         memberType.receiver?.let { declaredReceiver ->
             receiverDecl?.let { collectTypeVarBindings(declaredReceiver, it, bindings) }
         }
+        val contextLimit = minOf(memberType.contextReceivers.size, currentImplicitReceiverTypeNames().size)
+        for (i in 0 until contextLimit) {
+            collectTypeVarBindings(
+                memberType.contextReceivers[i],
+                TypeDecl.Simple(currentImplicitReceiverTypeNames()[i], false),
+                bindings
+            )
+        }
 
         val paramList = memberType.params
         val ellipsisIndex = paramList.indexOfFirst { it is TypeDecl.Ellipsis }
@@ -5842,6 +5946,7 @@ class Compiler(
         if (explicitTypeArgs.isNullOrEmpty()) return
         val typeVars = LinkedHashSet<String>()
         memberType.receiver?.let { collectTypeVarNamesInOrder(it, typeVars) }
+        memberType.contextReceivers.forEach { collectTypeVarNamesInOrder(it, typeVars) }
         memberType.params.forEach { collectTypeVarNamesInOrder(it, typeVars) }
         collectTypeVarNamesInOrder(memberType.returnType, typeVars)
         val names = typeVars.toList()
@@ -5857,6 +5962,7 @@ class Compiler(
             is TypeDecl.Generic -> type.args.forEach { collectTypeVarNamesInOrder(it, out) }
             is TypeDecl.Function -> {
                 type.receiver?.let { collectTypeVarNamesInOrder(it, out) }
+                type.contextReceivers.forEach { collectTypeVarNamesInOrder(it, out) }
                 type.params.forEach { collectTypeVarNamesInOrder(it, out) }
                 collectTypeVarNamesInOrder(type.returnType, out)
             }
@@ -6721,9 +6827,16 @@ class Compiler(
                 }
             }
             is TypeDecl.Function -> {
-                if (argType is TypeDecl.Function && paramType.params.size == argType.params.size) {
+                if (
+                    argType is TypeDecl.Function &&
+                    paramType.params.size == argType.params.size &&
+                    paramType.contextReceivers.size == argType.contextReceivers.size
+                ) {
                     if (paramType.receiver != null && argType.receiver != null) {
                         collectTypeVarBindings(paramType.receiver, argType.receiver, out)
+                    }
+                    for (i in paramType.contextReceivers.indices) {
+                        collectTypeVarBindings(paramType.contextReceivers[i], argType.contextReceivers[i], out)
                     }
                     for (i in paramType.params.indices) {
                         collectTypeVarBindings(paramType.params[i], argType.params[i], out)
@@ -7207,7 +7320,7 @@ class Compiler(
                     (ctx as? CodeContext.Function)?.implicitThisMembers == true
                 }
                 if ((classContext || implicitThis) && extensionNames.contains(left.name)) {
-                    val receiverTypeName = implicitReceiverTypeForMember(left.name) ?: implicitThisTypeName
+                    val receiverTypeName = implicitReceiverTypeForMember(left.name, left.pos()) ?: implicitThisTypeName
                     val ids = resolveImplicitThisMemberIds(left.name, left.pos(), receiverTypeName)
                     ImplicitThisMethodCallRef(
                         left.name,
@@ -7233,7 +7346,7 @@ class Compiler(
                     (ctx as? CodeContext.Function)?.implicitThisMembers == true
                 }
                 if ((classContext || implicitThis) && extensionNames.contains(left.name)) {
-                    val receiverTypeName = implicitReceiverTypeForMember(left.name) ?: implicitThisTypeName
+                    val receiverTypeName = implicitReceiverTypeForMember(left.name, left.pos()) ?: implicitThisTypeName
                     val ids = resolveImplicitThisMemberIds(left.name, left.pos(), receiverTypeName)
                     ImplicitThisMethodCallRef(
                         left.name,
@@ -7284,6 +7397,16 @@ class Compiler(
     }
 
     private fun expectedCallableArgumentType(target: ObjRef, argIndex: Int): TypeDecl.Function? {
+        lookupNamedFunctionDecl(target)?.let { decl ->
+            val params = decl.params.map { param ->
+                if (param.isEllipsis) TypeDecl.Ellipsis(param.type) else param.type
+            }
+            if (argIndex < params.size) {
+                return params[argIndex] as? TypeDecl.Function
+            }
+            val ellipsis = params.lastOrNull() as? TypeDecl.Ellipsis
+            return ellipsis?.elementType as? TypeDecl.Function
+        }
         val decl = (resolveReceiverTypeDecl(target) ?: seedTypeDeclFromRef(target)) as? TypeDecl.Function
             ?: return null
         val params = when (target) {
@@ -7609,7 +7732,7 @@ class Compiler(
                     CodeContext.Function(
                         "<init>",
                         implicitThisMembers = true,
-                        implicitThisTypeName = implicitThisType
+                        implicitReceiverTypeNames = listOfNotNull(implicitThisType)
                     )
                 ) {
                     parseBlock()
@@ -9728,7 +9851,7 @@ class Compiler(
             CodeContext.Function(
                 name,
                 implicitThisMembers = implicitThisMembers,
-                implicitThisTypeName = implicitThisTypeName,
+                implicitReceiverTypeNames = listOfNotNull(implicitThisTypeName),
                 typeParams = typeParams,
                 typeParamDecls = typeParamDecls,
                 noImplicitThis = noImplicitThis
@@ -10843,9 +10966,17 @@ class Compiler(
             }
         }
 
-        val initialExpression = if (setNull || isProperty) null
-        else parseStatement(true)
-            ?: throw ScriptError(effectiveEqToken!!.pos, "Expected initializer expression")
+        val initialExpression = if (setNull || isProperty) {
+            null
+        } else if (varTypeDecl is TypeDecl.Function && cc.peekNextNonWhitespace().type == Token.Type.LBRACE) {
+            val brace = cc.nextNonWhitespace()
+            ExpressionStatement(
+                parseLambdaExpression(expectedCallableType = varTypeDecl),
+                brace.pos
+            )
+        } else {
+            parseStatement(true) ?: throw ScriptError(effectiveEqToken!!.pos, "Expected initializer expression")
+        }
 
         if (varTypeDecl == TypeDecl.TypeAny && initialExpression != null) {
             val inferred = inferTypeDeclFromInitializer(initialExpression)
@@ -11071,7 +11202,7 @@ class Compiler(
                             CodeContext.Function(
                                 "<getter>",
                                 implicitThisMembers = accessorImplicitThisMembers,
-                                implicitThisTypeName = accessorImplicitThisTypeName
+                                implicitReceiverTypeNames = listOfNotNull(accessorImplicitThisTypeName)
                             )
                         ) {
                             wrapFunctionBytecode(parseBlock(), "<getter>")
@@ -11083,7 +11214,7 @@ class Compiler(
                             CodeContext.Function(
                                 "<getter>",
                                 implicitThisMembers = accessorImplicitThisMembers,
-                                implicitThisTypeName = accessorImplicitThisTypeName
+                                implicitReceiverTypeNames = listOfNotNull(accessorImplicitThisTypeName)
                             )
                         ) {
                             val expr = parseExpression()
@@ -11110,7 +11241,7 @@ class Compiler(
                             CodeContext.Function(
                                 "<setter>",
                                 implicitThisMembers = accessorImplicitThisMembers,
-                                implicitThisTypeName = accessorImplicitThisTypeName
+                                implicitReceiverTypeNames = listOfNotNull(accessorImplicitThisTypeName)
                             )
                         ) {
                             wrapFunctionBytecode(parseBlockWithPredeclared(listOf(setArgName to true)), "<setter>")
@@ -11123,7 +11254,7 @@ class Compiler(
                             CodeContext.Function(
                                 "<setter>",
                                 implicitThisMembers = accessorImplicitThisMembers,
-                                implicitThisTypeName = accessorImplicitThisTypeName
+                                implicitReceiverTypeNames = listOfNotNull(accessorImplicitThisTypeName)
                             )
                         ) {
                             parseExpressionBlockWithPredeclared(listOf(setArgName to true))
@@ -11152,7 +11283,7 @@ class Compiler(
                                     CodeContext.Function(
                                         "<setter>",
                                         implicitThisMembers = accessorImplicitThisMembers,
-                                        implicitThisTypeName = accessorImplicitThisTypeName
+                                        implicitReceiverTypeNames = listOfNotNull(accessorImplicitThisTypeName)
                                     )
                                 ) {
                                     parseBlockWithPredeclared(listOf(setArg.value to true))
@@ -11166,7 +11297,7 @@ class Compiler(
                                     CodeContext.Function(
                                         "<setter>",
                                         implicitThisMembers = accessorImplicitThisMembers,
-                                        implicitThisTypeName = accessorImplicitThisTypeName
+                                        implicitReceiverTypeNames = listOfNotNull(accessorImplicitThisTypeName)
                                     )
                                 ) {
                                     parseExpressionBlockWithPredeclared(listOf(setArg.value to true))

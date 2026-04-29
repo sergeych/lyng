@@ -352,6 +352,40 @@ Sets `this` to the first argument and executes the block. Returns the value retu
     assertEquals(3, sum)
     >>> void
 
+Receiver lambdas can also keep outer receivers in scope. The primary receiver wins for unqualified lookup, and `this@Type`
+selects an outer receiver explicitly:
+
+    class Html { fun lang() = "en" }
+    class Body { fun lang() = "body" }
+
+    fun html(block: Html.()->String) = with(Html()) { block(this) }
+    fun body(block: Body.()->String) = with(Body()) { block(this) }
+
+    val result = html {
+        body {
+            lang() + ":" + this@Html.lang()
+        }
+    }
+    assertEquals("body:en", result)
+    >>> void
+
+You can declare the same requirement in a function type:
+
+    val block: context(Html) Body.()->String = {
+        lang() + ":" + this@Html.lang()
+    }
+
+If the primary receiver does not define a member and multiple outer/context receivers do, Lyng reports an ambiguity instead of picking one silently:
+
+    class A { fun title() = "a" }
+    class B { fun title() = "b" }
+    class C
+
+    val block: context(A, B) C.()->String = {
+        // title()  // compile-time ambiguity
+        this@A.title()
+    }
+
 ## run
 
 Executes a block after it returning the value passed by the block. for example, can be used with elvis operator:

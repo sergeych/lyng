@@ -164,7 +164,12 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
   - unions `A | B`
   - intersections `A & B`
   - function types `(A, B)->R` and receiver form `Receiver.(A)->R`
+  - receiver-stack function types via `context(A, B) Receiver.(P)->R`
   - variadics in function type via ellipsis (`T...`)
+- `A & B` means one value implementing both types.
+- `context(A, B) Receiver.(P)->R` is different: it declares an ordered implicit-receiver stack where `Receiver` is primary `this`, then `A`, then `B`.
+- Nested receiver lambdas keep outer receivers in scope; unqualified lookup prefers the innermost receiver, and `this@Type` can select an outer/context receiver explicitly.
+- If the primary receiver does not provide a member and multiple outer/context receivers do, the lookup is a compile-time ambiguity and must be disambiguated with `this@Type`.
 - Generics:
   - type params on classes/functions/type aliases
   - bounds via `:` with union/intersection expressions
@@ -217,6 +222,7 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
 - Disambiguation helpers are supported:
   - qualified this: `this@Base.member()`
   - cast view: `(obj as Base).member()`
+- In nested receiver lambdas, `this@Type` can target any receiver visible through the receiver stack, not just inheritance ancestors.
 - On unknown receiver types, compiler allows only Object-safe members:
   - `toString`, `toInspectString`, `let`, `also`, `apply`, `run`
 - Other members require known receiver type or explicit cast.

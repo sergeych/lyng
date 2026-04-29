@@ -474,6 +474,29 @@ class MiniAstTest {
     }
 
     @Test
+    fun miniAst_captures_context_receiver_function_type() = runTest {
+        val code = """
+            val block: context(Html, Head) Body.()->String = { "ok" }
+        """.trimIndent()
+        val (_, sink) = compileWithMini(code)
+        val mini = sink.build()
+        assertNotNull(mini)
+        val vd = mini.declarations.filterIsInstance<MiniValDecl>().firstOrNull { it.name == "block" }
+        assertNotNull(vd)
+        val type = vd.type as MiniFunctionType
+        val receiver = type.receiver as MiniTypeName
+        assertEquals(listOf("Body"), receiver.segments.map { it.name })
+        assertEquals(2, type.contextReceivers.size)
+        val ctx0 = type.contextReceivers[0] as MiniTypeName
+        val ctx1 = type.contextReceivers[1] as MiniTypeName
+        assertEquals(listOf("Html"), ctx0.segments.map { it.name })
+        assertEquals(listOf("Head"), ctx1.segments.map { it.name })
+        assertTrue(type.params.isEmpty())
+        val ret = type.returnType as MiniTypeName
+        assertEquals(listOf("String"), ret.segments.map { it.name })
+    }
+
+    @Test
     fun miniAst_captures_dokka_tags() = runTest {
         val code = """
             /**

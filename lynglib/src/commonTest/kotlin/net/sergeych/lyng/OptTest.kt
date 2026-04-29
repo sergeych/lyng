@@ -154,4 +154,132 @@ class OptTest {
             assert( cnt == 4 )
         """.trimIndent())
     }
+
+    @Test
+    fun testReceivers1() = runTest {
+        eval("""
+            class RA {
+                fun a() { println("a") }
+            }
+            class RB {
+                fun b() { println("b") }
+            }
+            
+            fun ta( f: RA.()->Unit ) {
+                val instance = RA()
+                with(instance) { f(this) }
+            }
+            fun tb( f: RB.()->Unit ) {
+                val b = RB()
+                with(b) { f(this) }
+            }
+            ta {
+                a()
+                tb { 
+                    b()
+                    // but important: a() must still be accessible 
+                    // because it is inner block, sort of closure:
+                    a()
+                }
+            }
+        """.trimIndent())
+    }
+
+    @Test
+    fun testContextReceiverFunctionType() = runTest {
+        eval("""
+            class RA {
+                fun value(): Int = 10
+            }
+            class RB {
+                fun value(): Int = 20
+            }
+
+            fun ta(f: RA.()->Int): Int {
+                val instance = RA()
+                return with(instance) { f(this) }
+            }
+
+            fun tb(f: context(RA) RB.()->Int): Int {
+                val instance = RB()
+                return with(instance) { f(this) }
+            }
+
+            val result = ta {
+                val block: context(RA) RB.()->Int = {
+                    value() + this@RA.value()
+                }
+                tb(block)
+            }
+
+            assertEquals(30, result)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testNestedReceiverQualifiedThis() = runTest {
+        eval("""
+            class RA {
+                fun value(): Int = 1
+            }
+            class RB {
+                fun value(): Int = 2
+            }
+
+            fun ta(f: RA.()->Int): Int {
+                val instance = RA()
+                return with(instance) { f(this) }
+            }
+            fun tb(f: RB.()->Int): Int {
+                val instance = RB()
+                return with(instance) { f(this) }
+            }
+
+            val result = ta {
+                tb {
+                    value() + this@RA.value()
+                }
+            }
+
+            assertEquals(3, result)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testReceiverAmbiguityRequiresQualifiedThis() = runTest {
+        val ex = assertFailsWith<ScriptError> {
+            eval("""
+                class RA {
+                    fun shared(): Int = 10
+                }
+                class RC {
+                    fun shared(): Int = 30
+                }
+                class RB
+
+                fun ta(f: RA.()->Int): Int {
+                    val instance = RA()
+                    return with(instance) { f(this) }
+                }
+                fun tc(f: RC.()->Int): Int {
+                    val instance = RC()
+                    return with(instance) { f(this) }
+                }
+                fun tb(f: context(RA, RC) RB.()->Int): Int {
+                    val instance = RB()
+                    return with(instance) { f(this) }
+                }
+
+                ta {
+                    tc {
+                        val block: context(RA, RC) RB.()->Int = {
+                            shared()
+                        }
+                        tb(block)
+                    }
+                }
+            """.trimIndent())
+        }
+        assertContains(ex.message ?: "", "ambiguous between receivers RA, RC")
+    }
 }

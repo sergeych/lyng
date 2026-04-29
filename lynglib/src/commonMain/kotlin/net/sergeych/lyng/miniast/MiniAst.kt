@@ -139,6 +139,7 @@ data class MiniGenericType(
 data class MiniFunctionType(
     override val range: MiniRange,
     val receiver: MiniTypeRef?,
+    val contextReceivers: List<MiniTypeRef>,
     val params: List<MiniTypeRef>,
     val returnType: MiniTypeRef,
     val nullable: Boolean

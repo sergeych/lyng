@@ -206,7 +206,17 @@ private fun typeDeclKey(type: TypeDecl): String = when (type) {
     TypeDecl.TypeNullableAny -> "Any?"
     is TypeDecl.Simple -> "S:${type.name}"
     is TypeDecl.Generic -> "G:${type.name}<${type.args.joinToString(",") { typeDeclKey(it) }}>"
-    is TypeDecl.Function -> "F:(${type.params.joinToString(",") { typeDeclKey(it) }})->${typeDeclKey(type.returnType)}"
+    is TypeDecl.Function -> buildString {
+        append("F:")
+        type.receiver?.let { append("recv=").append(typeDeclKey(it)).append(";") }
+        if (type.contextReceivers.isNotEmpty()) {
+            append("ctx=").append(type.contextReceivers.joinToString(",") { typeDeclKey(it) }).append(";")
+        }
+        append('(')
+        append(type.params.joinToString(",") { typeDeclKey(it) })
+        append(")->")
+        append(typeDeclKey(type.returnType))
+    }
     is TypeDecl.Ellipsis -> "E:${typeDeclKey(type.elementType)}"
     is TypeDecl.TypeVar -> "V:${type.name}"
     is TypeDecl.Union -> "U:${type.options.joinToString("|") { typeDeclKey(it) }}"
