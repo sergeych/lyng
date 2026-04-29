@@ -38,12 +38,48 @@ Route handlers use `RequestContext` as the receiver, so inside handlers you norm
 
 - `jsonBody<T>()`
 - `respondJson(...)`
+- `respondHtml { ... }`
 - `respondText(...)`
 - `setHeader(...)`
 - `request.path`
 - `routeParams["id"]`
 
 This keeps ordinary HTTP endpoints compact and avoids passing an explicit request or exchange parameter through every route lambda.
+
+## HTML Response Sugar
+
+Use `respondHtml { ... }` to render an HTML document with the `lyng.io.html` DSL and send it as `text/html; charset=utf-8`.
+
+```lyng
+import lyng.io.http.server
+import lyng.io.html
+
+val server = HttpServer()
+
+server.get("/") {
+    respondHtml {
+        head {
+            title { +"Lyng status" }
+        }
+        body {
+            h3 { +"Service is running" }
+            p { +("Path: " + request.path) }
+        }
+    }
+}
+
+server.listen(8080, "127.0.0.1")
+```
+
+Pass `code:` when the route should return a non-200 status:
+
+```lyng
+server.get("/accepted") {
+    respondHtml(code: 202) {
+        body { h3 { +"Accepted" } }
+    }
+}
+```
 
 ## JSON API Sugar
 
@@ -54,25 +90,28 @@ For ordinary JSON APIs, `RequestContext` includes two primary helpers:
 
 These helpers intentionally use ordinary JSON projection for HTTP interop, not canonical `Json.encode(...)`.
 
-### Typed JSON POST
+### Typed JSON POST With Route Params
 
 ```lyng
 import lyng.io.http.server
 
-closed class CreateUserRequest(name: String, age: Int)
-closed class CreateUserResponse(id: Int, name: String, age: Int)
+closed class CreateResultRequest(title: String, score: Int)
+closed class CreateResultResponse(id: String, userId: String, title: String, score: Int)
 
 val server = HttpServer()
 
-server.postPath("/api/users") {
-    val req = jsonBody<CreateUserRequest>()
+server.postPath("/api/users/{userId}/results") {
+    val req = jsonBody<CreateResultRequest>()
 
-    if (req.name.isBlank()) {
-        respondJson({ error: "name must not be empty" }, 400)
+    if (req.title.isBlank()) {
+        respondJson({ error: "title must not be empty" }, 400)
         return
     }
 
-    respondJson(CreateUserResponse(101, req.name, req.age), 201)
+    respondJson(
+        CreateResultResponse("r-101", routeParams["userId"], req.title, req.score),
+        201
+    )
 }
 
 server.listen(8080, "127.0.0.1")
@@ -118,6 +157,7 @@ server.listen(8080, "127.0.0.1")
 - `respond(...)`
 - `respondText(...)`
 - `respondJson(body, status = 200)`
+- `respondHtml(code: 200) { ... }`
 - `setHeader(...)`
 - `addHeader(...)`
 - `acceptWebSocket(...)`

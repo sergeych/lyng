@@ -316,6 +316,53 @@ class LyngHttpServerModuleTest {
     }
 
     @Test
+    fun respondHtmlRendersHtmlDslAndSetsContentType() = runBlocking {
+        val engine = getSystemNetEngine()
+        if (!engine.isSupported || !engine.isTcpAvailable) return@runBlocking
+
+        val scope = Script.newScope()
+        createHttpServerModule(PermitAllNetAccessPolicy, scope)
+
+        val code = """
+            import lyng.io.http.server
+            import lyng.io.html
+
+            val server = HttpServer()
+            server.getPath("/html/{name}") {
+                respondHtml(code: 202) {
+                    head { title { +"Greeting" } }
+                    body {
+                        h3 { +("Hello, " + routeParams["name"]) }
+                    }
+                }
+            }
+            server.listen(0, "127.0.0.1")
+        """.trimIndent()
+
+        val handle = Compiler.compile(code).execute(scope)
+        val port = waitForPort(handle, scope)
+
+        val client = engine.tcpConnect("127.0.0.1", port, 2_000, true)
+        try {
+            client.writeUtf8("GET /html/alice%26bob HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            client.flush()
+            val response = readHttpResponse(client)
+            assertTrue(response.contains("202"), response)
+            assertTrue(response.contains("Content-Type: text/html; charset=utf-8"), response)
+            assertTrue(
+                response.endsWith(
+                    "<!doctype html><html><head><title>Greeting</title></head><body><h3>Hello, alice&amp;bob</h3></body></html>"
+                ),
+                response
+            )
+        } finally {
+            client.close()
+        }
+
+        handle.invokeInstanceMethod(scope, "close")
+    }
+
+    @Test
     fun routerMountPreservesBuiltInRoutingSemantics() = runBlocking {
         val engine = getSystemNetEngine()
         if (!engine.isSupported || !engine.isTcpAvailable) return@runBlocking

@@ -2,6 +2,7 @@ package net.sergeych.lyng.io.http.server
 
 import kotlinx.serialization.json.Json
 import net.sergeych.lyng.ModuleScope
+import net.sergeych.lyng.Pos
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.ScopeFacade
 import net.sergeych.lyng.Source
@@ -28,6 +29,7 @@ import net.sergeych.lyng.obj.requiredArg
 import net.sergeych.lyng.obj.thisAs
 import net.sergeych.lyng.io.http.ObjHttpHeaders
 import net.sergeych.lyng.io.http.createHttpTypesModule
+import net.sergeych.lyng.io.html.createHtmlModule
 import net.sergeych.lyng.io.ws.ObjWsMessage
 import net.sergeych.lyng.io.ws.createWsTypesModule
 import net.sergeych.lyng.serialization.ObjJsonClass
@@ -60,6 +62,7 @@ fun createHttpServer(policy: NetAccessPolicy, scope: Scope): Boolean = createHtt
 fun createHttpServerModule(policy: NetAccessPolicy, manager: ImportManager): Boolean {
     createHttpTypesModule(manager)
     createWsTypesModule(manager)
+    createHtmlModule(manager)
     if (manager.packageNames.contains(HTTP_SERVER_MODULE_NAME)) return false
     manager.addPackage(HTTP_SERVER_MODULE_NAME) { module ->
         buildHttpServerModule(module, policy)
@@ -119,6 +122,7 @@ private val regexType = TypeDecl.Simple("Regex", false)
 private val nullableRegexMatchType = TypeDecl.Simple("RegexMatch", true)
 private val voidType = TypeDecl.Simple("Void", false)
 private val httpHeadersType = TypeDecl.Simple("HttpHeaders", false)
+private val htmlTagType = TypeDecl.Simple("HtmlTag", false)
 private val serverRequestType = TypeDecl.Simple("ServerRequest", false)
 private val requestContextType = TypeDecl.Simple("RequestContext", false)
 private val serverWebSocketType = TypeDecl.Simple("ServerWebSocket", false)
@@ -873,6 +877,33 @@ private class ObjServerExchange(
                         } else {
                             (body.invokeInstanceMethod(requireScope(), "toJsonString") as ObjString).value
                         }
+                        self.setHttpResponse(status, bodyText.encodeToByteArray())
+                        ObjVoid
+                    }
+                    bridgeFn(
+                        this,
+                        "respondHtml",
+                        base.getInstanceMemberOrNull("respondHtml")?.typeDecl as? TypeDecl.Function
+                            ?: fnType(voidType, intType, receiverFnType(htmlTagType, voidType)),
+                        callSignature = receiverCallSignature("HtmlTag")
+                    ) {
+                        val self = thisAs<ObjServerExchange>()
+                        val first = args.list.getOrNull(0)
+                        val second = args.list.getOrNull(1)
+                        val status = args.named["code"]?.let { objToInt(this, it, "code") } ?: when {
+                            first is ObjInt && second != null -> first.value.toInt()
+                            second is ObjInt -> second.value.toInt()
+                            else -> 200
+                        }
+                        val builder = when {
+                            first is ObjInt -> second
+                            else -> first
+                        } ?: raiseIllegalArgument("respondHtml requires a builder")
+                        val htmlModule = requireScope().importManager.createModuleScope(Pos.builtIn, "lyng.io.html")
+                        val htmlFn = htmlModule.get("html")?.value ?: raiseIllegalState("lyng.io.html.html is not available")
+                        val bodyText = (call(htmlFn, Arguments(listOf(builder))) as ObjString).value
+                        self.ensureMutable(this)
+                        self.responseHeaders["Content-Type"] = mutableListOf("text/html; charset=utf-8")
                         self.setHttpResponse(status, bodyText.encodeToByteArray())
                         ObjVoid
                     }

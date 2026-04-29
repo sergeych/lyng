@@ -853,7 +853,16 @@ class Compiler(
             else -> null
         }
         if (name == null) return null
-        val signature = callSignatureForName(name)
+        val signature = when (left) {
+            is ImplicitThisMemberRef -> {
+                val receiverType = left.preferredThisTypeName() ?: implicitReceiverTypeForMember(name)
+                receiverType
+                    ?.let { resolveClassByName(it) }
+                    ?.getInstanceMemberOrNull(name)
+                    ?.callSignature
+            }
+            else -> null
+        } ?: callSignatureForName(name)
         return signature?.tailBlockReceiverType ?: if (name == "flow") "FlowBuilder" else null
     }
 

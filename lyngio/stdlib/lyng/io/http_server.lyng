@@ -3,6 +3,7 @@ package lyng.io.http.server
 import lyng.io.http.types
 import lyng.serialization
 import lyng.io.ws.types
+import lyng.io.html
 
 /* Immutable parsed incoming server request. */
 extern class ServerRequest {
@@ -36,6 +37,7 @@ extern class RequestContext {
     fun respond(status: Int = 200, body: Buffer? = null): void
     fun respondText(status: Int = 200, bodyText: String = ""): void
     fun respondJson(body: Object?, status: Int = 200): void
+    fun respondHtml(code: Int = 200, builder: HtmlTag.()->void): void
     fun setHeader(name: String, value: String): void
     fun addHeader(name: String, value: String): void
     fun acceptWebSocket(handler: RequestContext.(ServerWebSocket) -> Object?): void
