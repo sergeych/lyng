@@ -1,22 +1,142 @@
 package lyng.io.html
 
-/*
-    HTML helpers package.
-    API surface is intentionally empty for now; this package exists so Lyng code
-    can import `lyng.io.html` and grow declarations here incrementally.
-*/
+import lyng.stdlib
 
-class HtmlBuilder {
-
-    private val head: List<String> = []
-    private val body: List<String> = []
-
-    fun build(): String =
-            "<HTML>" +
-            (head.isEmpty() ? "" : head.joinToString("\n")) +
-            (body.isEmpty() ? "" : body.joinToString("\n")) +
-            "</HTML>"
+fun escapeHtml(text: String): String {
+    val amp: String = text.replace("&", "&amp;")
+    val lt: String = amp.replace("<", "&lt;")
+    lt.replace(">", "&gt;")
 }
 
-fun buildHtml(f: HtmlBuilder.()->void): String {
-    HtmlBuilder().apply(f).build()
+fun escapeHtmlAttr(text: String): String {
+    val escaped: String = escapeHtml(text)
+    val quoted: String = escaped.replace("\"", "&quot;")
+    quoted.replace("'", "&#39;")
+}
+
+class HtmlTag(name: String, isVoid: Bool = false) {
+    val name = name
+    val isVoid = isVoid
+    var attributes = ""
+    var inner = ""
+
+    fun attr(name: String, value: Object): HtmlTag {
+        attributes += " " + name + "=\"" + escapeHtmlAttr(value.toString()) + "\""
+        this
+    }
+
+    fun flag(name: String): HtmlTag {
+        attributes += " " + name
+        this
+    }
+
+    fun id(value: String): HtmlTag = attr("id", value)
+
+    fun classes(value: String): HtmlTag = attr("class", value)
+
+    fun addText(text: String): void {
+        inner += escapeHtml(text)
+    }
+
+    fun raw(html: String): void {
+        inner += html
+    }
+
+    fun child(tagName: String, block: HtmlTag.()->void): void {
+        val child = HtmlTag(tagName)
+        with(child) { block(this) }
+        inner += child.render()
+    }
+
+    fun voidChild(tagName: String, block: HtmlTag.()->void): void {
+        val child = HtmlTag(tagName, true)
+        with(child) { block(this) }
+        inner += child.render()
+    }
+
+    fun tag(name: String, block: HtmlTag.()->void): void { child(name, block) }
+
+    fun voidTag(name: String, block: HtmlTag.()->void): void { voidChild(name, block) }
+
+    fun render(): String {
+        if (isVoid) "<" + name + attributes + ">"
+        else "<" + name + attributes + ">" + inner + "</" + name + ">"
+    }
+
+    fun head(block: HtmlTag.()->void): void { child("head", block) }
+    fun body(block: HtmlTag.()->void): void { child("body", block) }
+    fun title(block: HtmlTag.()->void): void { child("title", block) }
+    fun main(block: HtmlTag.()->void): void { child("main", block) }
+    fun section(block: HtmlTag.()->void): void { child("section", block) }
+    fun article(block: HtmlTag.()->void): void { child("article", block) }
+    fun header(block: HtmlTag.()->void): void { child("header", block) }
+    fun footer(block: HtmlTag.()->void): void { child("footer", block) }
+    fun nav(block: HtmlTag.()->void): void { child("nav", block) }
+    fun div(block: HtmlTag.()->void): void { child("div", block) }
+    fun span(block: HtmlTag.()->void): void { child("span", block) }
+    fun p(block: HtmlTag.()->void): void { child("p", block) }
+    fun a(href: String, block: HtmlTag.()->void): void {
+        child("a") {
+            attr("href", href)
+            block(this)
+        }
+    }
+    fun ul(block: HtmlTag.()->void): void { child("ul", block) }
+    fun ol(block: HtmlTag.()->void): void { child("ol", block) }
+    fun li(block: HtmlTag.()->void): void { child("li", block) }
+    fun h1(block: HtmlTag.()->void): void { child("h1", block) }
+    fun h2(block: HtmlTag.()->void): void { child("h2", block) }
+    fun h3(block: HtmlTag.()->void): void { child("h3", block) }
+    fun h4(block: HtmlTag.()->void): void { child("h4", block) }
+    fun h5(block: HtmlTag.()->void): void { child("h5", block) }
+    fun h6(block: HtmlTag.()->void): void { child("h6", block) }
+    fun strong(block: HtmlTag.()->void): void { child("strong", block) }
+    fun em(block: HtmlTag.()->void): void { child("em", block) }
+    fun code(block: HtmlTag.()->void): void { child("code", block) }
+    fun pre(block: HtmlTag.()->void): void { child("pre", block) }
+    fun script(block: HtmlTag.()->void): void { child("script", block) }
+    fun style(block: HtmlTag.()->void): void { child("style", block) }
+
+    fun meta(block: HtmlTag.()->void): void { voidChild("meta", block) }
+    fun link(block: HtmlTag.()->void): void { voidChild("link", block) }
+    fun img(block: HtmlTag.()->void): void { voidChild("img", block) }
+    fun br(block: HtmlTag.()->void): void { voidChild("br", block) }
+    fun input(block: HtmlTag.()->void): void { voidChild("input", block) }
+
+    fun metaCharset(charset: String = "utf-8"): void {
+        meta { attr("charset", charset) }
+    }
+
+    fun stylesheet(href: String): void {
+        link {
+            attr("rel", "stylesheet")
+            attr("href", href)
+        }
+    }
+
+    fun img(src: String, alt: String = ""): void {
+        voidChild("img") {
+            attr("src", src)
+            if (alt != "") attr("alt", alt)
+        }
+    }
+
+    fun input(type: String, name: String = "", value: String = ""): void {
+        voidChild("input") {
+            attr("type", type)
+            if (name != "") attr("name", name)
+            if (value != "") attr("value", value)
+        }
+    }
+}
+
+context(HtmlTag)
+fun String.unaryPlus(): void {
+    this@HtmlTag.addText(this)
+}
+
+fun html(block: HtmlTag.()->void): String {
+    val root = HtmlTag("html")
+    with(root) { block(this) }
+    "<!doctype html>" + root.render()
+}
