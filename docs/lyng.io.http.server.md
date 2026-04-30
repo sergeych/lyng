@@ -63,7 +63,7 @@ server.get("/") {
         }
         body {
             h3 { +"Service is running" }
-            p { +("Path: ${request.path}" }
+            p { +"Path: ${request.path}" }
         }
     }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 package net.sergeych.lyng.highlight
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class HighlightMappingTest {
@@ -70,6 +71,38 @@ class HighlightMappingTest {
         assertTrue(labeled.any { it.first == "1.0" && it.second == HighlightKind.Number })
         assertTrue(labeled.any { it.first == "'c'" && it.second == HighlightKind.Char })
         assertTrue(labeled.any { it.first == "\"s\"" && it.second == HighlightKind.String })
+    }
+
+    @Test
+    fun interpolatedStringSpansDoNotOverlap() {
+        val text = """p { +"Path: ${'$'}{request.path}" }"""
+        val spans = SimpleLyngHighlighter().highlight(text)
+        spans.zipWithNext().forEach { (a, b) ->
+            assertTrue(
+                a.range.endExclusive <= b.range.start,
+                "Highlight spans must not overlap: $a then $b in $spans"
+            )
+        }
+        assertTrue(
+            spansToLabeled(text, spans).any {
+                it.first == "\"Path: ${'$'}{request.path}\"" && it.second == HighlightKind.String
+            }
+        )
+    }
+
+    @Test
+    fun interpolatedStringRenderingDoesNotDuplicateText() {
+        val text = """p { +"Path: ${'$'}{request.path}" }"""
+        val rendered = buildString {
+            var pos = 0
+            for (span in SimpleLyngHighlighter().highlight(text)) {
+                if (span.range.start > pos) append(text.substring(pos, span.range.start))
+                append(text.substring(span.range.start, span.range.endExclusive))
+                pos = span.range.endExclusive
+            }
+            if (pos < text.length) append(text.substring(pos))
+        }
+        assertEquals(text, rendered)
     }
 
     @Test

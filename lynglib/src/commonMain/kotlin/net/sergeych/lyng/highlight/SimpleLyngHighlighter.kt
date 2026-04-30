@@ -117,6 +117,28 @@ private fun mergeAdjacent(spans: List<HighlightSpan>): List<HighlightSpan> {
     return out
 }
 
+/**
+ * The parser expands interpolated strings into expression-like token streams whose
+ * synthetic tokens share source positions with the original string. Keep the
+ * widest source span at each offset and drop nested overlaps so renderers can
+ * rely on the public non-overlapping span contract.
+ */
+private fun removeOverlappingSpans(spans: List<HighlightSpan>): List<HighlightSpan> {
+    if (spans.size < 2) return spans
+    val sorted = spans.sortedWith(
+        compareBy<HighlightSpan> { it.range.start }
+            .thenByDescending { it.range.endExclusive - it.range.start }
+    )
+    val out = ArrayList<HighlightSpan>(sorted.size)
+    var coveredUntil = -1
+    for (span in sorted) {
+        if (span.range.start < coveredUntil) continue
+        out += span
+        coveredUntil = span.range.endExclusive
+    }
+    return out
+}
+
 /** Simple highlighter using the existing Lyng lexer (no incremental support yet). */
 class SimpleLyngHighlighter : LyngHighlighter {
     override fun highlight(text: String): List<HighlightSpan> {
@@ -170,8 +192,8 @@ class SimpleLyngHighlighter : LyngHighlighter {
         val overridden = applyEnumConstantHeuristics(text, src, tokens, raw)
         // Adjust single-line comment spans to extend till EOL to compensate for lexer offset/length quirks
         val adjusted = extendSingleLineCommentsToEol(text, overridden)
-        // Spans are in order; merge adjacent of the same kind for compactness
-        return mergeAdjacent(adjusted)
+        // Normalize spans, then merge adjacent spans of the same kind for compactness.
+        return mergeAdjacent(removeOverlappingSpans(adjusted))
     }
 }
 

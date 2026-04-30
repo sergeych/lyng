@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Sergey S. Chernov real.sergeych@gmail.com
+ * Copyright 2026 Sergey S. Chernov real.sergeych@gmail.com
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
  */
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -75,5 +76,26 @@ class LyngHighlightTest {
         val html = renderMarkdown(md)
         // the '<' should be escaped in HTML
         assertTrue(html.contains("&lt;"), "Expected escaped < inside highlighted HTML: $html")
+    }
+
+    @Test
+    fun rendersInterpolatedStringOnce() {
+        val md = """
+            ```lyng
+            p { +"Path: ${'$'}{request.path}" }
+            ```
+        """.trimIndent()
+        val html = renderMarkdown(md)
+
+        assertEquals(
+            1,
+            Regex("Path:").findAll(html).count(),
+            "Rendered markdown duplicated string content: $html"
+        )
+        assertEquals(
+            1,
+            Regex("request\\.path").findAll(html).count(),
+            "Rendered markdown duplicated interpolation content: $html"
+        )
     }
 }
