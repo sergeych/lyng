@@ -636,13 +636,10 @@ if (!Console.isSupported()) {
             }
         }
 
-        var inputRunning = true
         launch {
-            while (inputRunning) {
+            while (true) {
                 try {
                     for (ev in Console.events()) {
-                        if (!inputRunning) break
-
                         // Isolate per-event failures so one bad event does not unwind the stream.
                         try {
                             if (ev is ConsoleKeyEvent) {
@@ -675,7 +672,6 @@ if (!Console.isSupported()) {
                     }
                 } catch (err: Object) {
                     // Recover stream-level failures by recreating event stream in next loop turn.
-                    if (!inputRunning) break
                     logError("Input stream recovered after error", err)
                     Console.setRawMode(true)
                     delay(50)
@@ -803,7 +799,6 @@ if (!Console.isSupported()) {
                 delay(FRAME_DELAY_MS)
             }
         } finally {
-            inputRunning = false
             Console.setRawMode(false)
             Console.setCursorVisible(true)
             Console.leaveAltScreen()

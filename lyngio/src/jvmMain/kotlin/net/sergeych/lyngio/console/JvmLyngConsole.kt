@@ -237,6 +237,10 @@ object JvmLyngConsole : LyngConsole {
             val attrs = term.attributes
             attrs.setLocalFlag(Attributes.LocalFlag.ICANON, false)
             attrs.setLocalFlag(Attributes.LocalFlag.ECHO, false)
+            attrs.setLocalFlag(Attributes.LocalFlag.IEXTEN, false)
+            attrs.setLocalFlag(Attributes.LocalFlag.ISIG, false)
+            attrs.setInputFlag(Attributes.InputFlag.ICRNL, false)
+            attrs.setInputFlag(Attributes.InputFlag.IXON, false)
             attrs.setControlChar(Attributes.ControlChar.VMIN, 0)
             attrs.setControlChar(Attributes.ControlChar.VTIME, 1)
             term.setAttributes(attrs)
