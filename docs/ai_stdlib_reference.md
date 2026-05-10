@@ -88,6 +88,10 @@ Sources: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/Script.kt`, `lynglib/s
 Requires installing `lyngio` into the import manager from host code.
 - `import lyng.io.fs` (filesystem `Path` API)
 - `import lyng.io.process` (process execution API)
+  - Shell-script sugar: `sh(command): CommandRun` and `exec(executable, args=[]): CommandRun`.
+  - Prefer `sh("git status --short").out` for small shell output, `sh("...").lines` for large stdout streams, and `.check()` for commands that must exit with code 0.
+  - Prefer `exec("git", ["add", file])` when arguments come from data, filenames, or user input; it bypasses shell parsing.
+  - `CommandRun` is active and owns process pipes; choose one consumption path per stream (`out` or `lines`, `err` or `errorLines`).
 - `import lyng.io.console` (console capabilities, geometry, ANSI/output, events)
 - `import lyng.io.http` (HTTP/HTTPS client API)
 - `import lyng.io.http.server` (minimal HTTP/1.1 and WebSocket server API)

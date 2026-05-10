@@ -19,9 +19,11 @@ package net.sergeych.lyng.io.process
 
 import kotlinx.coroutines.runBlocking
 import net.sergeych.lyng.Compiler
+import net.sergeych.lyng.ExecutionError
 import net.sergeych.lyng.Script
 import net.sergeych.lyngio.process.security.PermitAllProcessAccessPolicy
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class LyngProcessModuleTest {
@@ -83,5 +85,79 @@ class LyngProcessModuleTest {
         val script = Compiler.compile(code)
         val result = script.execute(scope)
         assertTrue(result.inspect(scope).contains("name"), "Result should contain 'name', but was: ${result.inspect(scope)}")
+    }
+
+    @Test
+    fun testShellSugarCapturesOutput() = runBlocking {
+        val scope = Script.newScope()
+        createProcessModule(PermitAllProcessAccessPolicy, scope)
+
+        val code = """
+            import lyng.io.process
+
+            val r = sh("echo shell-sugar")
+            assert(r.out.trim() == "shell-sugar")
+            assert(r.code == 0)
+            assert(r.ok == true)
+            true
+        """.trimIndent()
+
+        val script = Compiler.compile(code)
+        val result = script.execute(scope)
+        assertTrue(result.inspect(scope).contains("true"))
+    }
+
+    @Test
+    fun testShellSugarStreamsLines() = runBlocking {
+        val scope = Script.newScope()
+        createProcessModule(PermitAllProcessAccessPolicy, scope)
+
+        val code = """
+            import lyng.io.process
+
+            val lines: List<String> = []
+            for (line in sh("echo one && echo two").lines) {
+                lines.add(line)
+            }
+            lines.joinToString(",")
+        """.trimIndent()
+
+        val script = Compiler.compile(code)
+        val result = script.execute(scope)
+        assertTrue(result.inspect(scope).contains("one,two"))
+    }
+
+    @Test
+    fun testExecSugarCapturesOutput() = runBlocking {
+        val scope = Script.newScope()
+        createProcessModule(PermitAllProcessAccessPolicy, scope)
+
+        val code = """
+            import lyng.io.process
+
+            exec("echo", ["exec-sugar"]).out.trim()
+        """.trimIndent()
+
+        val script = Compiler.compile(code)
+        val result = script.execute(scope)
+        assertTrue(result.inspect(scope).contains("exec-sugar"))
+    }
+
+    @Test
+    fun testShellSugarCheckFailsOnNonZeroExit() = runBlocking {
+        val scope = Script.newScope()
+        createProcessModule(PermitAllProcessAccessPolicy, scope)
+
+        val code = """
+            import lyng.io.process
+
+            sh("echo check-failed && exit 7").check()
+        """.trimIndent()
+
+        val script = Compiler.compile(code)
+        assertFailsWith<ExecutionError> {
+            script.execute(scope)
+        }
+        Unit
     }
 }

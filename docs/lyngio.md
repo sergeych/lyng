@@ -14,7 +14,7 @@
 
 - **[lyng.io.db](lyng.io.db.md):** Portable SQL database access. Provides `Database`, `SqlTransaction`, `ResultSet`, SQLite support through `lyng.io.db.sqlite`, and JVM JDBC support through `lyng.io.db.jdbc`.
 - **[lyng.io.fs](lyng.io.fs.md):** Async filesystem access. Provides the `Path` class for file/directory operations, streaming, and globbing.
-- **[lyng.io.process](lyng.io.process.md):** External process execution and shell commands. Provides `Process`, `RunningProcess`, and `Platform` information.
+- **[lyng.io.process](lyng.io.process.md):** External process execution and shell commands. Provides shell-script sugar (`sh`, `exec`, `CommandRun`), low-level `Process`/`RunningProcess`, and `Platform` information.
 - **[lyng.io.console](lyng.io.console.md):** Rich console/TTY access. Provides `Console` capability detection, geometry, output, and iterable events.
 - **[lyng.io.http](lyng.io.http.md):** HTTP/HTTPS client access. Provides `Http`, `HttpRequest`, `HttpResponse`, and `HttpHeaders`.
 - **[lyng.io.http.server](lyng.io.http.server.md):** Minimal HTTP/1.1 and WebSocket server. Provides `HttpServer`, `Router`, `ServerRequest`, `RequestContext`, and `ServerWebSocket`.

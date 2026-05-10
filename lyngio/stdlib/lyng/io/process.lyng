@@ -1,0 +1,59 @@
+package lyng.io.process
+
+/* Handle to a running process. This is the low-level process API. */
+extern class RunningProcess {
+    /* Standard output as a flow of process output lines. */
+    fun stdout(): Flow<String>
+    /* Standard error as a flow of process error lines. */
+    fun stderr(): Flow<String>
+    /* Send a signal such as "SIGINT", "SIGTERM", or "SIGKILL". */
+    fun signal(signal: String): void
+    /* Wait for process completion and return its exit code. */
+    fun waitFor(): Int
+    /* Forcefully terminate the process. */
+    fun destroy(): void
+}
+
+/* Shell-script friendly active handle for a running command. */
+extern class CommandRun {
+    /* Original shell command or argv-style command display text. */
+    val command: String
+    /* Capture standard output as a string, wait for completion, and drain stderr concurrently. Use `lines` for large output. */
+    val out: String
+    /* Capture standard error as a string, wait for completion, and drain stdout concurrently. Use `errorLines` for large output. */
+    val err: String
+    /* Streaming standard output lines. Treat the process stdout stream as one-shot. */
+    val lines: Flow<String>
+    /* Streaming standard error lines. Treat the process stderr stream as one-shot. */
+    val errorLines: Flow<String>
+    /* Exit code after `wait`, `check`, `out`, or `err`; otherwise null. */
+    val code: Int?
+    /* True for exit code 0, false for non-zero, or null before the exit code is known. */
+    val ok: Bool?
+    /* Wait for the command to exit and return the exit code. */
+    fun wait(): Int
+    /* Capture output, wait for completion, and fail if the exit code is non-zero. */
+    fun check(): CommandRun
+}
+
+/* Process execution and control. */
+extern object Process {
+    /* Execute a process with arguments without using a shell. */
+    fun execute(executable: String, args: List<String>): RunningProcess
+    /* Execute a command via the system shell. */
+    fun shell(command: String): RunningProcess
+}
+
+/* Platform information for process support. */
+extern object Platform {
+    /* Get platform core details. */
+    fun details(): Map<String,Object?>
+    /* Check if processes are supported on this platform. */
+    fun isSupported(): Bool
+}
+
+/* Run a command via the system shell and return an active command handle. */
+extern fun sh(command: String): CommandRun
+
+/* Run an executable with argv-style arguments and return an active command handle. */
+extern fun exec(executable: String, args: List<String> = []): CommandRun

@@ -4,6 +4,7 @@ The Lyng CLI is the reference command-line tool for the Lyng language. It lets y
 
 - Run Lyng scripts from files or inline strings (shebangs accepted)
 - Use standard argument passing (`ARGV`) to your scripts.
+- Import `lyng.io.process` for shell-script style process execution (`sh`, `exec`, and `CommandRun`).
 - Resolve local file imports from the executed script's directory tree.
 - Format Lyng source files via the built-in `fmt` subcommand.
 - Register synchronous process-exit handlers with `atExit(...)`.
@@ -79,6 +80,15 @@ lyng -- -my-script.lyng arg1 arg2
 
 ```
 lyng -x "println(\"Hello\")" more args
+```
+
+The CLI installs `lyng.io.process`, so scripts can use the shell/process shorthand after importing it:
+
+```lyng
+import lyng.io.process
+
+val branch = sh("git branch --show-current").out.trim()
+exec("git", ["status", "--short"]).check()
 ```
 
 - Print version/help:
