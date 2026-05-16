@@ -48,12 +48,16 @@ assertEquals(A.E.One, A.One)
 
 - [Language home](https://lynglang.com)
 - [introduction and tutorial](docs/tutorial.md) - start here please
-- [Latest release notes (1.5.5)](docs/whats_new.md)
+- [Latest release notes (1.5.6)](docs/whats_new.md)
 - [What's New in 1.5](docs/whats_new_1_5.md)
 - [Testing and Assertions](docs/Testing.md)
 - [Filesystem and Processes (lyngio)](docs/lyngio.md)
 - [SQL Databases (lyng.io.db)](docs/lyng.io.db.md)
+- [HTTP Server (lyng.io.http.server)](docs/lyng.io.http.server.md)
+- [HTML Builder (lyng.io.html)](docs/lyng.io.html.md)
+- [Process Execution (lyng.io.process)](docs/lyng.io.process.md)
 - [Time and Calendar Types](docs/time.md)
+- [Json support](docs/json_and_kotlin_serialization.md)
 - [Return Statement](docs/return_statement.md)
 - [Efficient Iterables in Kotlin Interop](docs/EfficientIterables.md)
 - [Samples directory](docs/samples)
@@ -66,7 +70,7 @@ assertEquals(A.E.One, A.One)
 ### Add dependency to your project
 
 ```kotlin
-val lyngVersion = "1.5.5"
+val lyngVersion = "1.5.6"
 
 repositories {
     // ...
@@ -186,7 +190,7 @@ Designed to add scripting to kotlin multiplatform application in easy and effici
 
 # Language Roadmap
 
-The current stable release is **v1.5.5**: the 1.5 cycle now includes the database/date/concurrency additions as well as the latest compiler/runtime stabilization work, and the language, tooling, and site are aligned around this release.
+The current stable release is **v1.5.6**: the 1.5 cycle now includes the database/date/concurrency additions, process execution, lightweight HTTP server and HTML DSL work, canonical Json serialization, and the latest compiler/runtime stabilization work.
 
 Ready features:
 

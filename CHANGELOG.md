@@ -11,6 +11,31 @@ History note:
 
 - No unreleased entries yet.
 
+## 1.5.6 (2026-05-16)
+
+### Process execution and CLI scripting
+- Added `lyng.io.process` for coroutine-friendly external process execution.
+- Added `sh(...)`, `exec(...)`, and `CommandRun` with captured output, streaming output, `wait()`, `check()`, and process status helpers.
+- Documented safe shell-vs-argv usage and common script patterns for CLI automation.
+
+### HTTP server and HTML rendering
+- Added the minimal `lyng.io.http.server` API for embedded HTTP/1.1 services, local tools, test fixtures, and lightweight app backends.
+- Added exact-path, regex, and path-template routing with named route parameters.
+- Added `RequestContext` receiver sugar, JSON helpers (`jsonBody<T>()`, `respondJson(...)`), reusable routers, and WebSocket routes.
+- Added `respondHtml { ... }` and the pure Lyng `lyng.io.html` builder DSL with escaped text, attributes, common tag helpers, and generic tag escape hatches.
+
+### Language and serialization
+- Added receiver-stack function types and context receiver extensions for DSL-style APIs.
+- Added canonical JSON round-trip APIs with `Json.encode(...)` / `Json.decode(...)`.
+- Added typed canonical JSON APIs with `Json.encodeAs(Type, value)` / `Json.decodeAs(Type, text)`.
+- Extended database serialization support with typed canonical JSON encoding, SQL object expansion, decode annotations, and preserved declaration metadata.
+
+### Runtime, docs, and samples
+- Fixed nullable Elvis-with-`break` inference and callable return inference regressions.
+- Fixed CLI bootstrap behavior for HTTP server scripts and CLI input handling.
+- Expanded docs for HTTP, WebSocket, serialization, process execution, DSL receivers, and the generated site.
+- Release metadata and README now point to `1.5.6`.
+
 ## 1.5.5 (2026-04-23)
 
 ### Concurrency and collections

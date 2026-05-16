@@ -31,3 +31,4 @@ test_output*.txt
 /bugcontents.db
 /bugs/
 contents.db
+/docs/idea_plugin.md.deploy_backup

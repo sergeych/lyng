@@ -1,16 +1,17 @@
 # What's New in Lyng
 
-This document highlights the current Lyng release, **1.5.5**, and the broader additions from the 1.5 cycle.
+This document highlights the current Lyng release, **1.5.6**, and the broader additions from the 1.5 cycle.
 It is intentionally user-facing: new language features, new modules, new tools, and the practical things you can build with them.
 For a programmer-focused migration summary across 1.5.x, see `docs/whats_new_1_5.md`.
 
-## Release 1.5.5 Highlights
+## Release 1.5.6 Highlights
 
-- `1.5.5` extends the 1.5 line with practical database APIs, first-class calendar dates, and better coroutine building blocks.
+- `1.5.6` extends the 1.5 line with process execution helpers, a lightweight HTTP server, HTML rendering helpers, and better DSL support.
 - The 1.5 line now brings together richer ranges and loops, interpolation, math modules, immutable and observable collections, richer `lyngio`, and much better CLI/IDE support.
-- `1.5.5` adds `Channel`, `LaunchPool`, and `joinAll()` so coroutine-heavy scripts can coordinate work more directly.
-- `1.5.5` adds `Date`, the portable `lyng.io.db` layer, SQLite/JDBC providers, and a compatibility `lyng.legacy_digest` module.
-- `1.5.5` also continues runtime/compiler hardening with better import dispatch, faster exact lambda calls, and correct `val +=`/`-=` behavior for mutating types versus real reassignment.
+- `1.5.6` adds `lyng.io.process` with `sh(...)`, `exec(...)`, and `CommandRun` for shell scripting and external process control.
+- `1.5.6` adds the `lyng.io.http.server` module for exact, regex, and path-template routing, JSON helpers, WebSocket routes, and `respondHtml { ... }`.
+- `1.5.6` adds the pure Lyng `lyng.io.html` builder DSL and language support for receiver-stack function types and context receiver extensions.
+- `1.5.6` expands serialization with canonical `Json.encode(...)` / `Json.decode(...)` and typed `Json.encodeAs(...)` / `Json.decodeAs(...)`.
 - The docs, homepage samples, and release metadata now point at the current stable version.
 
 ## User Highlights Across 1.5.x
@@ -22,10 +23,117 @@ For a programmer-focused migration summary across 1.5.x, see `docs/whats_new_1_5
 - Calendar `Date` support in `lyng.time`
 - `Channel`, `LaunchPool`, and `joinAll()` for coroutine workflows
 - Immutable collections and opt-in `ObservableList`
-- Rich `lyngio` modules for SQLite/JDBC databases, console, HTTP, WebSocket, TCP, and UDP
+- Rich `lyngio` modules for SQLite/JDBC databases, process execution, console, HTTP, HTTP servers, WebSocket, TCP, UDP, and HTML rendering
 - Legacy SHA-1 compatibility helpers in `lyng.legacy_digest`
 - CLI improvements including the built-in formatter `lyng fmt`
 - Better IDE support and stronger docs around the released feature set
+
+## New in 1.5.6
+
+### Process Execution (`lyng.io.process`)
+Lyng scripts can now run external commands through a coroutine-friendly process API.
+Use `sh(...)` for shell commands and `exec(...)` when command arguments come from data and should bypass shell parsing.
+
+```lyng
+import lyng.io.process
+
+val branch = sh("git branch --show-current").out.trim()
+println("Branch: " + branch)
+
+exec("git", ["status", "--short"]).check()
+
+for (file in sh("git ls-files").lines) {
+    if (file.endsWith(".lyng")) {
+        println(file)
+    }
+}
+```
+
+`CommandRun` supports captured output (`out`, `err`), streaming line output (`lines`, `errorLines`), `wait()`, `check()`, and status helpers.
+See [lyng.io.process](lyng.io.process.md).
+
+### HTTP Server Routes and HTML Responses
+`lyng.io.http.server` now provides a compact HTTP/1.1 server API for embedded tools, local services, test fixtures, and lightweight app backends.
+Routes can match exact paths, regexes, or path templates with named parameters.
+Handlers run with `RequestContext` as the receiver, so request data and response helpers are available directly.
+
+```lyng
+import lyng.io.http.server
+
+val server = HttpServer()
+
+server.getPath("/api/users/{id}") {
+    respondJson({
+        id: routeParams["id"],
+        path: request.path,
+        ok: true
+    })
+}
+
+server.listen(8080, "127.0.0.1")
+```
+
+The server also supports reusable routers, JSON body decoding with `jsonBody<T>()`, WebSocket routes, and `respondHtml { ... }`.
+See [lyng.io.http.server](lyng.io.http.server.md).
+
+### HTML Builder DSL (`lyng.io.html`)
+`lyng.io.html` provides a pure Lyng HTML builder that escapes text and attributes by default.
+It is designed for server-side rendering, generated reports, and small embedded UI surfaces.
+
+```lyng
+import lyng.io.html
+
+val page = html {
+    head {
+        title { +"Demo" }
+    }
+    body {
+        nav {
+            a(href: "/") { +"Home" }
+        }
+        p { +"Text is escaped: <safe>" }
+    }
+}
+```
+
+When used with the HTTP server, `respondHtml { ... }` renders the same DSL directly as a `text/html` response.
+See [lyng.io.html](lyng.io.html.md).
+
+### Receiver-Stack Function Types and Context Extensions
+Lyng now supports receiver-stack function types such as `context(Html) Body.()->String`.
+Nested receiver lambdas keep outer receivers in scope, `this@Type` can select a specific receiver, and ambiguous receiver lookup is reported at compile time.
+
+```lyng
+class Html { fun htmlOnly() = "html" }
+class Body { fun bodyOnly() = "body" }
+
+val block: context(Html) Body.()->String = {
+    this@Html.htmlOnly() + ":" + bodyOnly()
+}
+```
+
+Context receiver extensions let APIs expose helpers only when the right implicit receiver is already active.
+This is what makes HTML builder code like `+"text"` work inside tag blocks without global builder state.
+See [Object Oriented Programming](OOP.md#receiver-stack-lambdas).
+
+### Canonical and Typed JSON Serialization
+The serialization layer now has separate APIs for ordinary JSON projection, self-describing canonical JSON, and schema-guided typed canonical JSON.
+
+```lyng
+import lyng.serialization
+
+closed class Point(x: Int, y: Int)
+closed class Segment(a: Point, b: Point)
+
+val value = Segment(Point(0, 1), Point(2, 3))
+val encoded = Json.encodeAs(Segment, value)
+
+assertEquals("{\"a\":{\"x\":0,\"y\":1},\"b\":{\"x\":2,\"y\":3}}", encoded)
+assertEquals(value, Json.decodeAs(Segment, encoded))
+```
+
+Use `toJson()` / `toJsonString()` for ordinary JSON interop, `Json.encode(...)` / `Json.decode(...)` for Lyng-to-Lyng round trips without a schema, and `Json.encodeAs(...)` / `Json.decodeAs(...)` when both sides already know the type.
+See [Json support](json_and_kotlin_serialization.md).
 
 ## Language Features
 
@@ -327,7 +435,7 @@ Singleton objects are declared using the `object` keyword. They provide a conven
 
 ```lyng
 object Config {
-    val version = "1.5.6-SNAPSHOT"
+    val version = "1.5.6"
     fun show() = println("Config version: " + version)
 }
 

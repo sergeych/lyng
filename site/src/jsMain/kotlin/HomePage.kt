@@ -159,7 +159,7 @@ fun HomePage() {
             val id = 101
             val name = "Lyng"
             val base = { id:, name: }
-            val full = { ...base, version: "1.5.5", status: "stable", tags: ["typed", "portable"] }
+            val full = { ...base, version: "1.5.6", status: "stable", tags: ["typed", "portable"] }
 
             println(full)
             """.trimIndent()

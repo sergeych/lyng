@@ -104,14 +104,14 @@ class WebsiteSamplesTest {
             val name = "Lyng"
             val base = { id:, name: } // Shorthand for id: id, name: name
 
-            val full = { ...base, version: "1.5.5", status: "stable" }
+            val full = { ...base, version: "1.5.6", status: "stable" }
             full
         """.trimIndent())
         assertTrue(result is ObjMap)
         val m = result.map
         assertEquals(101L, (m[ObjString("id")] as ObjInt).value)
         assertEquals("Lyng", (m[ObjString("name")] as ObjString).value)
-        assertEquals("1.5.5", (m[ObjString("version")] as ObjString).value)
+        assertEquals("1.5.6", (m[ObjString("version")] as ObjString).value)
         assertEquals("stable", (m[ObjString("status")] as ObjString).value)
     }
 
