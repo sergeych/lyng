@@ -19,13 +19,10 @@ package net.sergeych.lyng
 
 import kotlinx.coroutines.test.runTest
 import net.sergeych.lyng.bridge.bind
-import net.sergeych.lyng.obj.ObjRecord
-import net.sergeych.lyng.bridge.data
 import net.sergeych.lyng.bridge.bindGlobalVar
+import net.sergeych.lyng.bridge.data
 import net.sergeych.lyng.bridge.globalBinder
-import net.sergeych.lyng.obj.ObjFalse
-import net.sergeych.lyng.obj.ObjInstance
-import net.sergeych.lyng.obj.ObjTrue
+import net.sergeych.lyng.obj.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -138,10 +135,63 @@ class GlobalPropertyCaptureRegressionTest {
 
         assertEquals(77.0, x, "bound extern var should stay live after extern class property branch in child scope")
     }
+
+    @Test
+    fun externPropertyOnExternFunctionResultCanAssignExternGlobalVar() = runTest {
+        val base = Script.newScope() as ModuleScope
+        var x = 0L
+
+        base.eval(
+            """
+            extern var X: Int
+
+            class InputResult {
+                extern val value: Int?
+            }
+            """.trimIndent()
+        )
+
+        base.bind("InputResult") {
+            addVal("value") {
+                ObjInt.of(thisObjData<InputPayload>().value)
+            }
+        }
+
+        base.globalBinder().bindGlobalVar(
+            name = "X",
+            get = { x },
+            set = { x = it }
+        )
+
+        base.globalBinder().bindGlobalFunRaw("input") { _, _ ->
+            val instance = base.requireClass("InputResult").callOn(base.createChildScope()) as ObjInstance
+            instance.data = InputPayload(101L)
+            instance
+        }
+
+        val child = base.createChildScope()
+        child.eval(
+            """
+            extern fun input(): InputResult
+
+            fun main() {
+                X = input().value
+            }
+            """.trimIndent()
+        )
+
+        child.eval("main()")
+
+        assertEquals(101L, x, "extern property read directly from extern function result should assign live extern var")
+    }
 }
 
 private data class ChoicePayload(
     val isSkip: Boolean,
+)
+
+private data class InputPayload(
+    val value: Long,
 )
 
 @Suppress("UNCHECKED_CAST")

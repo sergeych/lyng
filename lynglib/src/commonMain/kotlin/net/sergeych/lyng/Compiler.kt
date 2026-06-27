@@ -6702,7 +6702,19 @@ class Compiler(
     private fun inferCallReturnTypeDecl(ref: CallRef): TypeDecl? {
         callReturnTypeDeclByRef[ref]?.let { return it }
         val targetDecl = (resolveReceiverTypeDecl(ref.target) ?: seedTypeDeclFromRef(ref.target)) as? TypeDecl.Function
-            ?: return null
+            ?: run {
+                val targetName = when (val target = ref.target) {
+                    is LocalVarRef -> target.name
+                    is FastLocalVarRef -> target.name
+                    is LocalSlotRef -> target.name
+                    else -> null
+                } ?: return null
+                val declaredReturn = callableReturnTypeDeclByName[targetName]
+                    ?: (seedTypeDeclByName(targetName) as? TypeDecl.Function)?.returnType
+                    ?: return null
+                callReturnTypeDeclByRef[ref] = declaredReturn
+                return declaredReturn
+            }
         val bindings = mutableMapOf<String, TypeDecl>()
         val paramList = mutableListOf<TypeDecl>()
         targetDecl.receiver?.let { paramList += it }
