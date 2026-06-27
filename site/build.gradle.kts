@@ -22,7 +22,7 @@
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     // Compose compiler plugin aligned with the project Kotlin version.
-    id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
+    alias(libs.plugins.kotlinCompose)
     // Compose Multiplatform plugin for convenient dependencies (compose.html.core, etc.)
     id("org.jetbrains.compose") version "1.9.3"
 }

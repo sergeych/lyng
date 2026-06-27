@@ -29,7 +29,7 @@ plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
 //    alias(libs.plugins.vanniktech.mavenPublish)
-    kotlin("plugin.serialization") version "2.3.20"
+    alias(libs.plugins.kotlinSerialization)
     id("com.codingfeline.buildkonfig") version "0.17.1"
     `maven-publish`
 }
