@@ -1,17 +1,17 @@
 # What's New in Lyng
 
-This document highlights the current Lyng release, **1.5.6**, and the broader additions from the 1.5 cycle.
+This document highlights the current Lyng release, **1.5.9**, and the broader additions from the 1.5 cycle.
 It is intentionally user-facing: new language features, new modules, new tools, and the practical things you can build with them.
 For a programmer-focused migration summary across 1.5.x, see `docs/whats_new_1_5.md`.
 
-## Release 1.5.6 Highlights
+## Release 1.5.9 Highlights
 
-- `1.5.6` extends the 1.5 line with process execution helpers, a lightweight HTTP server, HTML rendering helpers, and better DSL support.
+- `1.5.9` extends the 1.5 line with process execution helpers, a lightweight HTTP server, HTML rendering helpers, and better DSL support.
 - The 1.5 line now brings together richer ranges and loops, interpolation, math modules, immutable and observable collections, richer `lyngio`, and much better CLI/IDE support.
-- `1.5.6` adds `lyng.io.process` with `sh(...)`, `exec(...)`, and `CommandRun` for shell scripting and external process control.
-- `1.5.6` adds the `lyng.io.http.server` module for exact, regex, and path-template routing, JSON helpers, WebSocket routes, and `respondHtml { ... }`.
-- `1.5.6` adds the pure Lyng `lyng.io.html` builder DSL and language support for receiver-stack function types and context receiver extensions.
-- `1.5.6` expands serialization with canonical `Json.encode(...)` / `Json.decode(...)` and typed `Json.encodeAs(...)` / `Json.decodeAs(...)`.
+- `1.5.9` adds `lyng.io.process` with `sh(...)`, `exec(...)`, and `CommandRun` for shell scripting and external process control.
+- `1.5.9` adds the `lyng.io.http.server` module for exact, regex, and path-template routing, JSON helpers, WebSocket routes, and `respondHtml { ... }`.
+- `1.5.9` adds the pure Lyng `lyng.io.html` builder DSL and language support for receiver-stack function types and context receiver extensions.
+- `1.5.9` expands serialization with canonical `Json.encode(...)` / `Json.decode(...)` and typed `Json.encodeAs(...)` / `Json.decodeAs(...)`.
 - The docs, homepage samples, and release metadata now point at the current stable version.
 
 ## User Highlights Across 1.5.x
@@ -28,7 +28,7 @@ For a programmer-focused migration summary across 1.5.x, see `docs/whats_new_1_5
 - CLI improvements including the built-in formatter `lyng fmt`
 - Better IDE support and stronger docs around the released feature set
 
-## New in 1.5.6
+## New in 1.5.9
 
 ### Process Execution (`lyng.io.process`)
 Lyng scripts can now run external commands through a coroutine-friendly process API.
@@ -435,7 +435,7 @@ Singleton objects are declared using the `object` keyword. They provide a conven
 
 ```lyng
 object Config {
-    val version = "1.5.6"
+    val version = "1.5.9"
     fun show() = println("Config version: " + version)
 }
 

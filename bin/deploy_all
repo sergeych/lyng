@@ -17,15 +17,55 @@
 #
 #
 
-set -e
-echo "publishing all artifacts"
-echo
-./gradlew publishToMavenLocal site:jsBrowserDistribution publish buildInstallablePlugin :lyng:linkReleaseExecutableLinuxX64 :lyng:installJvmDist --parallel --no-configuration-cache
+set -euo pipefail
 
-#echo
-#echo "Creating plugin"
-#echo
-#./gradlew buildInstallablePlugin
+GRADLE_ARGS=(--no-configuration-cache --console=plain)
+
+echo "actualizing Kotlin JS/Wasm lock files"
+echo
+./gradlew kotlinUpgradeYarnLock kotlinWasmUpgradeYarnLock "${GRADLE_ARGS[@]}"
+
+echo "building all artifacts"
+echo
+./gradlew publishToMavenLocal site:jsBrowserDistribution buildInstallablePlugin :lyng:linkReleaseExecutableLinuxX64 :lyng:installJvmDist --parallel "${GRADLE_ARGS[@]}"
+
+echo
+echo "publishing remote Maven artifacts"
+echo
+tasks_log="$(mktemp)"
+./gradlew tasks --all "${GRADLE_ARGS[@]}" >"$tasks_log"
+mapfile -t publish_tasks < <(
+    sed -n 's/^\([^[:space:]]*publish.*PublicationToMavenRepository\) - .*$/:\1/p' "$tasks_log" |
+        sort -u
+)
+rm -f "$tasks_log"
+
+if [ "${#publish_tasks[@]}" -eq 0 ]; then
+    echo "No remote Maven publication tasks found."
+    exit 1
+fi
+
+for task in "${publish_tasks[@]}"; do
+    echo
+    echo "Publishing $task"
+    publish_log="$(mktemp)"
+    if ./gradlew "$task" "${GRADLE_ARGS[@]}" >"$publish_log" 2>&1; then
+        cat "$publish_log"
+        rm -f "$publish_log"
+        continue
+    fi
+
+    if grep -Eiq '(^|[^0-9])409([^0-9]|$)|already exists|already been published|cannot be updated|Package file already exists|Repository does not allow updating assets' "$publish_log"; then
+        cat "$publish_log"
+        echo "Skipping $task: artifact already exists in the Maven repository."
+        rm -f "$publish_log"
+        continue
+    fi
+
+    cat "$publish_log"
+    rm -f "$publish_log"
+    exit 1
+done
 
 echo
 echo "building CLI tools"

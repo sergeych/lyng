@@ -25,6 +25,11 @@ import org.jetbrains.compose.web.dom.*
 
 @Composable
 fun HomePage() {
+    val currentVersion = remember {
+        (window.asDynamic().LYNG_VERSION as? String)
+            ?.takeIf { it.isNotBlank() }
+            ?: "current"
+    }
     val samples = remember {
         listOf(
             """
@@ -159,7 +164,7 @@ fun HomePage() {
             val id = 101
             val name = "Lyng"
             val base = { id:, name: }
-            val full = { ...base, version: "1.5.6", status: "stable", tags: ["typed", "portable"] }
+            val full = { ...base, version: "$currentVersion", status: "stable", tags: ["typed", "portable"] }
 
             println(full)
             """.trimIndent()
