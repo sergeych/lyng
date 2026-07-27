@@ -19,17 +19,16 @@ package net.sergeych.lyng
 
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
-import net.sergeych.lyng.Script.Companion.defaultImportManager
 import net.sergeych.lyng.bridge.bind
 import net.sergeych.lyng.bridge.bindObject
+import net.sergeych.lyng.bytecode.BytecodeLambdaCallable
 import net.sergeych.lyng.bytecode.CmdFunction
 import net.sergeych.lyng.bytecode.CmdVm
-import net.sergeych.lyng.bytecode.BytecodeLambdaCallable
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
+import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.serialization.ObjJsonClass
 import net.sergeych.lyng.serialization.bindSerializationFormat
-import net.sergeych.lyng.pacman.ImportManager
 import net.sergeych.lyng.stdlib_included.complexLyng
 import net.sergeych.lyng.stdlib_included.decimalLyng
 import net.sergeych.lyng.stdlib_included.legacyDigestLyng
@@ -55,7 +54,15 @@ class Script(
 ) : Statement() {
     fun statements(): List<Statement> = statements
 
-    /** Compiler-resolved metadata for top-level function declarations in source order. */
+    /**
+     * Return compiler-resolved metadata for this script's top-level function declarations.
+     *
+     * Results retain source order and include declared or inferred signature types. This is a
+     * read-only view of information produced while compiling the script; calling it does not
+     * execute the script, its annotations, or parameter default expressions.
+     *
+     * @return metadata for every top-level function declaration in source order
+     */
     fun resolvedFunctionMetadata(): List<ResolvedFunctionMetadata> =
         statements.filterIsInstance<FunctionDeclStatement>().map { it.spec.resolvedMetadata }
 

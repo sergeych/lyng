@@ -65,6 +65,8 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
 - Declaration-side variadic parameters use ellipsis suffix:
   - functions: `fun f(head, tail...) { ... }`
   - lambdas: `{ x, rest... -> ... }`
+  - a typed parameter `values: T...` has signature type `T...`, but inside the callable `values`
+    is a `List<T>` containing the collected arguments.
 - Call-side splats use `...expr` and are expanded by argument kind:
   - positional splat: `f(...[1,2,3])`
   - named splat: `f(...{ a: 1, b: 2 })` (map-style)

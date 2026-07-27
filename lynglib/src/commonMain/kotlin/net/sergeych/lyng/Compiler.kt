@@ -11802,7 +11802,19 @@ class Compiler(
         }
 
         /**
-         * Compile [source] and return semantic top-level function metadata without evaluating it.
+         * Resolve semantic metadata for top-level functions in [source] without evaluating it.
+         *
+         * Functions are returned in source order. Their metadata includes annotations, visibility,
+         * generic parameters, parameter declarations and defaults, receiver information, and the
+         * declared or compiler-inferred return type. Annotation names are collected syntactically;
+         * annotation functions and default expressions are not executed.
+         *
+         * This performs parsing, import resolution, and semantic compilation, but does not generate
+         * executable bytecode. Use [compile] when the resulting script must also be executed.
+         *
+         * @param source named Lyng source whose top-level functions should be inspected
+         * @param importManager provider used to resolve the source's imports and external types
+         * @return metadata for each top-level function declaration in source order
          */
         suspend fun resolveFunctionMetadata(
             source: Source,

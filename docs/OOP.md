@@ -1248,7 +1248,7 @@ scopeB()
 assertThrows { 42.description }
 ```
 
-This isolation ensures that libraries can use extensions internally without worrying about name collisions with other libraries or the user's code. When a module is imported using `use`, its top-level extensions become available in the importing scope.
+This isolation ensures that libraries can use extensions internally without worrying about name collisions with other libraries or the user's code. When a package is imported using `import`, its top-level extensions become available in the importing scope. An imported extension property's getter and setter retain the lexical scope of the package that declared them, so they can safely call that package's private helpers and bound `extern` functions and properties.
 
 ## dynamic symbols
 

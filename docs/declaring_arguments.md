@@ -41,6 +41,18 @@ Ellipsis can also appear in **function types** to denote a variadic position:
 
 Ellipsis argument receives what is left from arguments after processing regular one that could be before or after.
 
+For a typed declaration, the ellipsis type describes each argument while the name inside the
+function is a list of those arguments. Thus `values: Int...` is `Int...` in the function signature
+and `List<Int>` in the function body:
+
+```lyng
+fun sum(values: Int...): Int {
+    var result = 0
+    for (value in values) result += value
+    return result
+}
+```
+
 Ellipsis could be a first argument:
 
     fun testCountArgs(data...,size) {

@@ -107,6 +107,79 @@ val run2 = script.execute(scope)
 `Scope.eval("...")` is the low-level shortcut that compiles and executes on the given scope.
 For most embedding use cases, prefer `session.eval("...")`.
 
+### 2.2) Inspect function signatures without executing source
+
+Declaration generators and other host tools can ask the compiler for semantic metadata about
+top-level functions without running the script:
+
+```kotlin
+val source = Source(
+    "service.lyng",
+    """
+        @Export
+        fun greet<T: Object = String>(
+            first: T,
+            rest: T...,
+            punctuation: String = "!",
+        ): String = first.toString() + punctuation
+    """.trimIndent()
+)
+
+val functions = Compiler.resolveFunctionMetadata(
+    source,
+    Script.defaultImportManager,
+)
+val greet = functions.single()
+
+println(greet.name)                         // greet
+println(greet.annotations)                  // [Export]
+println(greet.parameters[1].isEllipsis)     // true
+println(greet.parameters[2].defaultSource)  // "!"
+println(greet.returnType)                   // String
+```
+
+`resolveFunctionMetadata(...)` parses the source and resolves its imports and types, but it does
+not execute the script, annotation functions, or default expressions. It returns
+`ResolvedFunctionMetadata` entries in source order. Each entry provides:
+
+- the function name, visibility, annotations, and source positions;
+- generic parameters with their variance, bounds, and default types;
+- parameters, variadic markers, and the original text of default expressions when available;
+- the complete function type, including receivers, context receivers, and the declared or inferred
+  return type.
+
+For a variadic declaration such as `values: Int...`, `ResolvedFunctionParameter.type` is the
+element type `Int`, `isEllipsis` is `true`, and the parameter in `functionType` is `Int...`.
+Inside Lyng function code, the collected `values` variable has type `List<Int>`.
+
+If you already compiled the source, obtain the same information without resolving it again:
+
+```kotlin
+val script = Compiler.compile(source, Script.defaultImportManager)
+val functions = script.resolvedFunctionMetadata()
+```
+
+Only top-level function declarations are returned. Use the Mini-AST APIs when tooling also needs
+nested declarations or a syntax-oriented representation.
+
+### 2.3) Prepare imports separately from execution
+
+Low-level hosts that own a scope can install a compiled script's imports without executing its
+statements:
+
+```kotlin
+val script = Compiler.compile(source, importManager)
+val scope = importManager.newModule()
+
+script.importInto(scope)
+val result = script.execute(scope)
+```
+
+`importInto(...)` is idempotent for a scope and is useful when import preparation and execution
+belong to different host lifecycle phases. To create a fresh raw module with the script's imports
+already installed, use `script.instantiateModule(seedScope)`. When supplied, `seedScope` provides
+the import provider and any seed-bound imports used by the new module.
+
 ### 3) Preferred: bind extern globals from Kotlin
 
 For module-level APIs, the default workflow is:
