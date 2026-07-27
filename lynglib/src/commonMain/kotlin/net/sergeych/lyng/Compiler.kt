@@ -19,6 +19,7 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.Compiler.Companion.compile
 import net.sergeych.lyng.bytecode.*
+import net.sergeych.lyng.highlight.offsetOf
 import net.sergeych.lyng.miniast.*
 import net.sergeych.lyng.obj.*
 import net.sergeych.lyng.pacman.ImportManager
@@ -3671,7 +3672,12 @@ class Compiler(
                 val effectiveType = if (param.isEllipsis) TypeDecl.Ellipsis(rawType) else rawType
                 lambdaParamTypeDecls += effectiveType
                 if (effectiveType != TypeDecl.TypeAny && effectiveType != TypeDecl.TypeNullableAny) {
-                    seedLambdaParamType(param.name, rawType)
+                    val localType = if (param.isEllipsis) {
+                        TypeDecl.Generic("List", listOf(rawType), false)
+                    } else {
+                        rawType
+                    }
+                    seedLambdaParamType(param.name, localType)
                 }
             }
         } else {
@@ -3753,7 +3759,7 @@ class Compiler(
         val returnClass = inferReturnClassFromStatement(body)
         val paramKnownClasses = mutableMapOf<String, ObjClass>()
         argsDeclaration?.params?.forEach { param ->
-            val cls = resolveTypeDeclObjClass(param.type) ?: return@forEach
+            val cls = resolveTypeDeclObjClass(param.localType) ?: return@forEach
             paramKnownClasses[param.name] = cls
         }
         val returnLabels = label?.let { setOf(it) } ?: emptySet()
@@ -4289,10 +4295,12 @@ class Compiler(
                     }
 
                     var defaultValue: Obj? = null
-                    cc.ifNextIs(Token.Type.ASSIGN) {
+                    var defaultSource: String? = null
+                    cc.ifNextIs(Token.Type.ASSIGN) { assignment ->
                         val expr = parseExpression()
                             ?: throw ScriptError(cc.current().pos, "Expected default value expression")
                         defaultValue = wrapBytecode(expr)
+                        defaultSource = extractDefaultArgumentSource(assignment.pos)
                     }
                     val isEllipsis = cc.skipTokenOfType(Token.Type.ELLIPSIS, isOptional = true)
                     result += ArgsDeclaration.Item(
@@ -4305,7 +4313,8 @@ class Compiler(
                         effectiveAccess,
                         visibility,
                         isTransient,
-                        annotationSpecs = annotationSpecs
+                        annotationSpecs = annotationSpecs,
+                        defaultSource = defaultSource,
                     )
 
                     // important: valid argument list continues with ',' and ends with '->' or ')'
@@ -4341,6 +4350,48 @@ class Compiler(
             }
         }
         return ArgsDeclaration(result, endTokenType)
+    }
+
+    /**
+     * Extracts a default expression from its original source. Token positions for strings point
+     * inside their quotes, so reconstructing the range from the first/last expression token loses
+     * delimiters. Scan the source instead, respecting nested groups and quoted literals.
+     */
+    private fun extractDefaultArgumentSource(assignmentPos: Pos): String {
+        val source = assignmentPos.source
+        val text = source.text
+        val start = source.offsetOf(assignmentPos) + 1
+        var index = start
+        var round = 0
+        var square = 0
+        var curly = 0
+        var quote: Char? = null
+        var escaped = false
+        while (index < text.length) {
+            val ch = text[index]
+            val activeQuote = quote
+            if (activeQuote != null) {
+                if (escaped) escaped = false
+                else if (ch == '\\') escaped = true
+                else if (ch == activeQuote) quote = null
+                index++
+                continue
+            }
+            when (ch) {
+                '"', '\'', '`' -> quote = ch
+                '(' -> round++
+                ')' -> if (round == 0 && square == 0 && curly == 0) break else round--
+                '[' -> square++
+                ']' -> square--
+                '{' -> curly++
+                '}' -> curly--
+                ',' -> if (round == 0 && square == 0 && curly == 0) break
+                '.' -> if (round == 0 && square == 0 && curly == 0 &&
+                    text.startsWith("...", index)) break
+            }
+            index++
+        }
+        return text.substring(start, index).trim()
     }
 
     @Suppress("unused")
@@ -8666,7 +8717,7 @@ class Compiler(
 
             constructorArgsDeclaration?.params?.forEach { param ->
                 if (param.accessType != null) {
-                    val declClass = resolveTypeDeclObjClass(param.type)
+                    val declClass = resolveTypeDeclObjClass(param.localType)
                     if (declClass != null) {
                         classFieldTypesByName.getOrPut(qualifiedName) { mutableMapOf() }[param.name] = declClass
                     }
@@ -8684,8 +8735,8 @@ class Compiler(
                 val classParamTypeDeclMap = slotTypeDeclByScopeId.getOrPut(classSlotPlan.id) { mutableMapOf() }
                 for (param in ctorDecl.params) {
                     val slot = classSlotPlan.slots[param.name]?.index ?: continue
-                    classParamTypeDeclMap[slot] = param.type
-                    resolveTypeDeclObjClass(param.type)?.let { classParamTypeMap[slot] = it }
+                    classParamTypeDeclMap[slot] = param.localType
+                    resolveTypeDeclObjClass(param.localType)?.let { classParamTypeMap[slot] = it }
                 }
             }
             val ctorForcedLocalSlots = LinkedHashMap<String, Int>()
@@ -9984,7 +10035,7 @@ class Compiler(
             classMemberTypeDeclByName.getOrPut(parentContext.name) { mutableMapOf() }[name] = TypeDecl.Function(
                 receiver = receiverTypeDecl,
                 contextReceivers = contextReceiverTypeDecls,
-                params = argsDeclaration.params.map { it.type },
+                params = argsDeclaration.params.map { it.signatureType },
                 returnType = returnTypeDecl ?: TypeDecl.TypeAny,
                 nullable = false
             )
@@ -10087,19 +10138,19 @@ class Compiler(
             argsDeclaration = wrapDefaultArgsBytecode(argsDeclaration, forcedLocalSlots, paramSlotPlan.id)
             val capturePlan = CapturePlan(paramSlotPlan, isFunction = true, propagateToParentFunction = false)
             val rangeParamNames = argsDeclaration.params
-                .filter { isRangeType(it.type) }
+                .filter { isRangeType(it.localType) }
                 .map { it.name }
                 .toSet()
             val paramTypeMap = slotTypeByScopeId.getOrPut(paramSlotPlan.id) { mutableMapOf() }
             val paramTypeDeclMap = slotTypeDeclByScopeId.getOrPut(paramSlotPlan.id) { mutableMapOf() }
             for (param in argsDeclaration.params) {
-                val cls = resolveTypeDeclObjClass(param.type) ?: continue
+                val cls = resolveTypeDeclObjClass(param.localType) ?: continue
                 val slot = paramSlotPlan.slots[param.name]?.index ?: continue
                 paramTypeMap[slot] = cls
             }
             for (param in argsDeclaration.params) {
                 val slot = paramSlotPlan.slots[param.name]?.index ?: continue
-                paramTypeDeclMap[slot] = param.type
+                paramTypeDeclMap[slot] = param.localType
             }
 
             // Parse function body while tracking declared locals to compute precise capacity hints
@@ -10160,7 +10211,7 @@ class Compiler(
                     val memberTypeDecl = TypeDecl.Function(
                         receiver = receiverTypeDecl,
                         contextReceivers = contextReceiverTypeDecls,
-                        params = argsDeclaration.params.map { it.type },
+                        params = argsDeclaration.params.map { it.signatureType },
                         returnType = inferredReturnDecl ?: TypeDecl.TypeAny,
                         nullable = false
                     )
@@ -10194,7 +10245,7 @@ class Compiler(
                 if (!compileBytecode) return@let stmt
                 val paramKnownClasses = mutableMapOf<String, ObjClass>()
                 for (param in argsDeclaration.params) {
-                    val cls = resolveTypeDeclObjClass(param.type) ?: continue
+                    val cls = resolveTypeDeclObjClass(param.localType) ?: continue
                     paramKnownClasses[param.name] = cls
                 }
                 wrapFunctionBytecode(
@@ -10357,7 +10408,7 @@ class Compiler(
                 typeDecl = if (isDelegated) null else TypeDecl.Function(
                     receiver = receiverTypeDecl,
                     contextReceivers = contextReceiverTypeDecls,
-                    params = argsDeclaration.params.map { it.type },
+                    params = argsDeclaration.params.map { it.signatureType },
                     returnType = inferredReturnDecl ?: TypeDecl.TypeAny,
                     nullable = false
                 ),
@@ -10366,7 +10417,32 @@ class Compiler(
                 captureSlots = captureSlots,
                 slotIndex = declSlotIndex,
                 scopeId = declScopeId,
-                startPos = start
+                startPos = start,
+                resolvedMetadata = ResolvedFunctionMetadata(
+                    name = name,
+                    namePos = nameStartPos,
+                    declarationPos = start,
+                    visibility = visibility,
+                    annotations = declarationAnnotationSpecs.map { it.name },
+                    typeParams = mergedTypeParamDecls,
+                    parameters = argsDeclaration.params.map { parameter ->
+                        ResolvedFunctionParameter(
+                            name = parameter.name,
+                            type = parameter.type,
+                            isEllipsis = parameter.isEllipsis,
+                            hasDefault = parameter.defaultValue != null,
+                            defaultSource = parameter.defaultSource,
+                            pos = parameter.pos,
+                        )
+                    },
+                    functionType = TypeDecl.Function(
+                        receiver = receiverTypeDecl,
+                        contextReceivers = contextReceiverTypeDecls,
+                        params = argsDeclaration.params.map { it.signatureType },
+                        returnType = inferredReturnDecl ?: TypeDecl.TypeAny,
+                        nullable = false,
+                    ),
+                ),
             )
             val declaredFn = FunctionDeclStatement(spec)
             if (isStatic && parentIsClassBody) {
@@ -11724,6 +11800,16 @@ class Compiler(
             val script = Compiler(CompilerContext(parseLyng(source)), importManager).parseScript()
             return script
         }
+
+        /**
+         * Compile [source] and return semantic top-level function metadata without evaluating it.
+         */
+        suspend fun resolveFunctionMetadata(
+            source: Source,
+            importManager: ImportProvider,
+        ): List<ResolvedFunctionMetadata> =
+            compileWithResolution(source, importManager, compileBytecode = false)
+                .resolvedFunctionMetadata()
 
         suspend fun dryRun(source: Source, importManager: ImportProvider): ResolutionReport {
             return CompileTimeResolver.dryRun(source, importManager)

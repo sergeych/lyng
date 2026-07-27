@@ -3261,12 +3261,14 @@ class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cm
     override suspend fun perform(frame: CmdFrame) {
         val decl = frame.fn.constants[constId] as? BytecodeConst.ExtensionPropertyDecl
             ?: error("DECL_EXT_PROPERTY expects ExtensionPropertyDecl at $constId")
-        val type = frame.ensureScope().resolveExtensionReceiverClass(decl.extTypeName)
-        frame.ensureScope().addExtension(
+        val declarationScope = frame.ensureScope()
+        val property = decl.property.withDeclarationScope(declarationScope)
+        val type = declarationScope.resolveExtensionReceiverClass(decl.extTypeName)
+        declarationScope.addExtension(
             type,
-            decl.property.name,
+            property.name,
             ObjRecord(
-                decl.property,
+                property,
                 isMutable = false,
                 visibility = decl.visibility,
                 writeVisibility = decl.setterVisibility,
@@ -3274,9 +3276,9 @@ class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cm
                 type = ObjRecord.Type.Property
             )
         )
-        val getterName = extensionPropertyGetterName(decl.extTypeName, decl.property.name)
-        val getterWrapper = ObjExtensionPropertyGetterCallable(decl.property.name, decl.property)
-        frame.ensureScope().addItem(
+        val getterName = extensionPropertyGetterName(decl.extTypeName, property.name)
+        val getterWrapper = ObjExtensionPropertyGetterCallable(property.name, property)
+        declarationScope.addItem(
             getterName,
             false,
             getterWrapper,
@@ -3288,10 +3290,10 @@ class CmdDeclExtProperty(internal val constId: Int, internal val slot: Int) : Cm
         if (getterLocal != null) {
             frame.setObjUnchecked(frame.fn.scopeSlotCount + getterLocal, getterWrapper)
         }
-        if (decl.property.setter != null) {
-            val setterName = extensionPropertySetterName(decl.extTypeName, decl.property.name)
-            val setterWrapper = ObjExtensionPropertySetterCallable(decl.property.name, decl.property)
-            frame.ensureScope()
+        if (property.setter != null) {
+            val setterName = extensionPropertySetterName(decl.extTypeName, property.name)
+            val setterWrapper = ObjExtensionPropertySetterCallable(property.name, property)
+            declarationScope
                 .addItem(
                     setterName,
                     false,

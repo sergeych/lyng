@@ -509,5 +509,15 @@ data class ArgsDeclaration(val params: List<Item>, val endTokenType: Token.Type)
         val isTransient: Boolean = false,
         val annotationSpecs: List<ParsedDeclAnnotation> = emptyList(),
         val annotations: List<DeclAnnotation> = emptyList(),
-    )
+        /** Exact source text of the default expression, when parsed from Lyng source. */
+        val defaultSource: String? = null,
+    ) {
+        /** Type used at call sites, where ellipsis describes repeated arguments. */
+        val signatureType: TypeDecl
+            get() = if (isEllipsis) TypeDecl.Ellipsis(type) else type
+
+        /** Type visible inside the callable after repeated arguments are collected. */
+        val localType: TypeDecl
+            get() = if (isEllipsis) TypeDecl.Generic("List", listOf(type), false) else type
+    }
 }

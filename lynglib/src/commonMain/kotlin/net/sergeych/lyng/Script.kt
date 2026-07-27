@@ -55,6 +55,10 @@ class Script(
 ) : Statement() {
     fun statements(): List<Statement> = statements
 
+    /** Compiler-resolved metadata for top-level function declarations in source order. */
+    fun resolvedFunctionMetadata(): List<ResolvedFunctionMetadata> =
+        statements.filterIsInstance<FunctionDeclStatement>().map { it.spec.resolvedMetadata }
+
     /**
      * Explicitly apply this script's import/module bindings to [scope] without executing the script.
      * This is intended for embedding scenarios where the host owns scope lifecycle and wants

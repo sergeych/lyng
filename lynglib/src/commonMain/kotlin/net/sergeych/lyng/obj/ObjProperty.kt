@@ -32,15 +32,21 @@ import net.sergeych.lyng.executeBytecodeWithSeed
 class ObjProperty(
     val name: String,
     val getter: Obj?,
-    val setter: Obj?
+    val setter: Obj?,
+    private val declarationScope: Scope? = null
 ) : Obj() {
+
+    fun withDeclarationScope(scope: Scope): ObjProperty =
+        ObjProperty(name, getter, setter, scope)
 
     suspend fun callGetter(scope: Scope, instance: Obj, declaringClass: ObjClass? = null): Obj {
         val g = getter ?: scope.raiseError("property $name has no getter")
         // Execute getter in a child scope of the instance with 'this' properly set
         // Match extension function behavior (access to instance scope + call scope).
         val instanceScope = (instance as? ObjInstance)?.instanceScope ?: instance.autoInstanceScope(scope)
-        val execScope = scope.applyClosure(instanceScope).createChildScope(newThisObj = instance)
+        val receiverCallScope = scope.applyClosure(instanceScope)
+        val execBase = declarationScope?.let(receiverCallScope::applyClosure) ?: receiverCallScope
+        val execScope = execBase.createChildScope(newThisObj = instance)
         execScope.currentClassCtx = declaringClass
         (g as? BytecodeCallable)?.callOnFast(execScope)?.let { return it }
         return when (g) {
@@ -60,7 +66,9 @@ class ObjProperty(
         // Execute setter in a child scope of the instance with 'this' properly set and the value as an argument
         // Match extension function behavior (access to instance scope + call scope).
         val instanceScope = (instance as? ObjInstance)?.instanceScope ?: instance.autoInstanceScope(scope)
-        val execScope = scope.applyClosure(instanceScope).createChildScope(args = Arguments(value), newThisObj = instance)
+        val receiverCallScope = scope.applyClosure(instanceScope)
+        val execBase = declarationScope?.let(receiverCallScope::applyClosure) ?: receiverCallScope
+        val execScope = execBase.createChildScope(args = Arguments(value), newThisObj = instance)
         execScope.currentClassCtx = declaringClass
         (s as? BytecodeCallable)?.callOnFast(execScope)?.let { return }
         when (s) {

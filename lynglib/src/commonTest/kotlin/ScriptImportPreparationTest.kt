@@ -249,4 +249,39 @@ class ScriptImportPreparationTest {
         val result = script.execute(manager.newStdScope()) as ObjString
         assertEquals("<html><h3>Imported</h3></html>", result.value)
     }
+
+    @Test
+    fun importedExtensionPropertyAccessorsUseDeclaringModuleScope() = runTest {
+        val manager = Script.defaultImportManager.copy().apply {
+            addTextPackages(
+                """
+                package imported.extprop
+
+                private var prefix = "module"
+
+                private fun decorate(value: String): String = prefix + ":" + value
+
+                var String.decorated: String
+                    get() = decorate(this)
+                    set(value) { prefix = value }
+                """.trimIndent()
+            )
+        }
+        val script = Compiler.compile(
+            Source(
+                "<extension-property-import>",
+                """
+                import imported.extprop
+
+                val before = "ok".decorated
+                "ignored".decorated = "updated"
+                before + "|" + "ok".decorated
+                """.trimIndent()
+            ),
+            manager
+        )
+
+        val result = script.execute(manager.newStdScope()) as ObjString
+        assertEquals("module:ok|updated:ok", result.value)
+    }
 }

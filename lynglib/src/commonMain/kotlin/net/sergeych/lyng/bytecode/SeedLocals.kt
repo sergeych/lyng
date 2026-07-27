@@ -56,9 +56,9 @@ internal fun trySeedFrameLocalsFromScopeFast(frame: CmdFrame, scope: Scope): Boo
             record.type == ObjRecord.Type.Property -> return false
             record.value is ObjProperty -> return false
             else -> when (val direct = record.value) {
-                is FrameSlotRef -> direct.resolvedCaptureValueOrNull() ?: return false
-                is RecordSlotRef -> direct.resolvedCaptureValueOrNull() ?: return false
-                is ScopeSlotRef -> direct.resolvedCaptureValueOrNull() ?: return false
+                is FrameSlotRef -> if (record.isMutable) direct else direct.resolvedCaptureValueOrNull() ?: return false
+                is RecordSlotRef -> if (record.isMutable) direct else direct.resolvedCaptureValueOrNull() ?: return false
+                is ScopeSlotRef -> if (record.isMutable) direct else direct.resolvedCaptureValueOrNull() ?: return false
                 else -> direct
             }
         }
@@ -86,9 +86,9 @@ internal suspend fun seedFrameLocalsFromScope(frame: CmdFrame, scope: Scope) {
             scope.resolve(record, name)
         } else {
             when (val direct = record.value) {
-                is net.sergeych.lyng.FrameSlotRef -> direct.resolvedCaptureValueOrNull() ?: direct
-                is net.sergeych.lyng.RecordSlotRef -> direct.resolvedCaptureValueOrNull() ?: direct
-                is net.sergeych.lyng.ScopeSlotRef -> direct.resolvedCaptureValueOrNull() ?: direct
+                is net.sergeych.lyng.FrameSlotRef -> if (record.isMutable) direct else direct.resolvedCaptureValueOrNull() ?: direct
+                is net.sergeych.lyng.RecordSlotRef -> if (record.isMutable) direct else direct.resolvedCaptureValueOrNull() ?: direct
+                is net.sergeych.lyng.ScopeSlotRef -> if (record.isMutable) direct else direct.resolvedCaptureValueOrNull() ?: direct
                 else -> direct
             }
         }

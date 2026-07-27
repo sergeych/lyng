@@ -18,6 +18,7 @@ package net.sergeych.lyng
 
 import net.sergeych.lyng.bytecode.CmdFrame
 import net.sergeych.lyng.bytecode.CmdVm
+import net.sergeych.lyng.bytecode.seedFrameLocalsFromScope
 import net.sergeych.lyng.obj.Obj
 import net.sergeych.lyng.obj.ObjNull
 
@@ -34,6 +35,7 @@ class PropertyAccessorStatement(
                 val bytecodeStmt = requireBytecodeBody(scope, body, "property accessor")
                 val fn = bytecodeStmt.bytecodeFunction()
                 val binder: suspend (CmdFrame, Arguments) -> Unit = { frame, arguments ->
+                    seedFrameLocalsFromScope(frame, scope)
                     val slotPlan = fn.localSlotPlanByName()
                     val slotIndex = slotPlan[argName]
                         ?: scope.raiseIllegalState("property accessor argument $argName missing from slot plan")

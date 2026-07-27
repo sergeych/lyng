@@ -50,6 +50,7 @@ data class FunctionDeclSpec(
     val slotIndex: Int?,
     val scopeId: Int?,
     val startPos: Pos,
+    val resolvedMetadata: ResolvedFunctionMetadata,
 )
 
 internal suspend fun executeFunctionDecl(
