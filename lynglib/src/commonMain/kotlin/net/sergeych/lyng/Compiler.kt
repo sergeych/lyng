@@ -2895,8 +2895,32 @@ class Compiler(
     private suspend fun parseExpression(): Statement? {
         val pos = cc.currentPos()
         return parseExpressionLevel()?.let { ref ->
-            ExpressionStatement(ref, pos)
+            ExpressionStatement(lowerTypedAssignOperator(ref, pos), pos)
         }
+    }
+
+    private fun lowerTypedAssignOperator(ref: ObjRef, pos: Pos): ObjRef {
+        val assign = ref as? AssignOpRef ?: return ref
+        val target = assign.target as? FieldRef ?: return ref
+        val methodName = when (assign.op) {
+            BinOp.PLUS -> "plusAssign"
+            BinOp.MINUS -> "minusAssign"
+            BinOp.STAR -> "mulAssign"
+            BinOp.SLASH -> "divAssign"
+            BinOp.PERCENT -> "modAssign"
+            else -> return ref
+        }
+        val targetClass = resolveReceiverTypeDecl(target)?.let { resolveTypeDeclObjClass(it) } ?: return ref
+        if (targetClass.getInstanceMemberOrNull(methodName, includeAbstract = true, includeStatic = false) == null) {
+            return ref
+        }
+        return MethodCallRef(
+            target,
+            methodName,
+            listOf(ParsedArgument(ExpressionStatement(assign.value, pos), pos)),
+            tailBlock = false,
+            isOptional = target.isOptional,
+        )
     }
 
     private suspend fun parseExpressionLevel(level: Int = 0): ObjRef? {
@@ -4299,6 +4323,9 @@ class Compiler(
                     cc.ifNextIs(Token.Type.ASSIGN) { assignment ->
                         val expr = parseExpression()
                             ?: throw ScriptError(cc.current().pos, "Expected default value expression")
+                        if (typeInfo == TypeDecl.TypeAny) {
+                            inferTypeDeclFromInitializer(expr)?.let { typeInfo = it }
+                        }
                         defaultValue = wrapBytecode(expr)
                         defaultSource = extractDefaultArgumentSource(assignment.pos)
                     }

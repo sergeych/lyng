@@ -257,6 +257,46 @@ class OperatorOverloadingTest {
     }
 
     @Test
+    fun testAssignOperatorMethodsOnValMember() = runTest {
+        eval("""
+            class Counter(var n: Int) {
+                fun plusAssign(x: Int) { n = n + x }
+                fun minusAssign(x: Int) { n = n - x }
+                fun mulAssign(x: Int) { n = n * x }
+                fun divAssign(x: Int) { n = n / x }
+                fun modAssign(x: Int) { n = n % x }
+            }
+            class Holder(val counter: Counter)
+
+            val holder = Holder(Counter(10))
+            holder.counter += 2
+            assertEquals(12, holder.counter.n)
+            holder.counter -= 3
+            assertEquals(9, holder.counter.n)
+            holder.counter *= 4
+            assertEquals(36, holder.counter.n)
+            holder.counter /= 6
+            assertEquals(6, holder.counter.n)
+            holder.counter %= 4
+            assertEquals(2, holder.counter.n)
+        """.trimIndent())
+    }
+
+    @Test
+    fun testAssignOperatorFallbackOnMutableMember() = runTest {
+        eval("""
+            class Counter(val n: Int) {
+                fun minus(x: Int) = Counter(n - x)
+            }
+            class Holder(var counter: Counter)
+
+            val holder = Holder(Counter(10))
+            holder.counter -= 3
+            assertEquals(7, holder.counter.n)
+        """.trimIndent())
+    }
+
+    @Test
     fun testBuiltinListPlusAssignOnVal() = runTest {
         eval("""
             val list = [1, 2]

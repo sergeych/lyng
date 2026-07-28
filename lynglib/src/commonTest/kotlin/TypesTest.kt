@@ -768,6 +768,33 @@ class TypesTest {
         assertTrue(e.message?.contains("extern variable value cannot have an initializer or delegate") == true)
     }
 
+    @Test
+    fun testInferenceFromDefaults() = runTest {
+        eval("""
+            fun foo(i = 42, s = "bar",r = 0.0) {
+                assert( i is Int )
+                assert( s is String )
+                assert( r is Real )
+                r.toInt()
+            }
+            class Foobar(val i = 100,val s = "42", r = 1.0) {
+                fun test(amount: Int) {
+                    assert( i is Int )
+                    assert( s is String )
+                    assert( r is Real )
+                    (r * amount).toInt()
+                }
+            }
+            foo()
+            val fb = Foobar()
+            assert(fb.i is Int)
+            assert(fb.s is String)
+            assert(fb.r is Real)
+            val n = fb.test(15)
+            assertEquals(n, 15)
+        """.trimIndent())
+    }
+
 //    @Test fun nonTrivialOperatorsTest() = runTest {
 //        val s = Script.newScope()
 //        s.eval("""
