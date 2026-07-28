@@ -329,6 +329,15 @@ tasks.matching { it.name.startsWith("lint", ignoreCase = true) }.configureEach {
     this.enabled = false
 }
 
+// Kotlin/Native commonization replaces intermediate .knm files while Gradle is
+// snapshotting this task's outputs, which can make publishing fail with a
+// FileNotFoundException. These files are generated intermediates, so tracking
+// their state provides no useful incremental-build benefit.
+tasks.matching { it.name == "commonizeCInterop" }.configureEach {
+    doNotTrackState("Kotlin/Native commonizer mutates its output tree during execution")
+    notCompatibleWithConfigurationCache("Kotlin/Native cinterop commonization accesses task projects during execution")
+}
+
 publishing {
     val mavenToken by lazy {
         File("${System.getProperty("user.home")}/.gitea_token").readText()
