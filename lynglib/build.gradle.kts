@@ -21,7 +21,7 @@ import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 group = "net.sergeych"
-version = "1.5.10-SNAPSHOT"
+version = "1.5.10"
 
 // Removed legacy buildscript classpath declarations; plugins are applied via the plugins DSL below
 
