@@ -21,6 +21,23 @@ plugins {
     alias(libs.plugins.vanniktech.mavenPublish) apply false
 }
 
+// Some JVM dependencies are published as Java 21 bytecode. Keep the library's
+// Java 17 compilation target, but use a compatible runtime for its JVM tests.
+project(":lynglib") {
+    afterEvaluate {
+        val toolchains = extensions.getByType<org.gradle.jvm.toolchain.JavaToolchainService>()
+        tasks.withType<Test>().configureEach {
+            javaLauncher.set(toolchains.launcherFor {
+                languageVersion.set(JavaLanguageVersion.of(21))
+            })
+            // An explicit jvmTest invocation should execute the suite rather than
+            // silently reusing the previous test task outputs or build-cache entry.
+            outputs.upToDateWhen { false }
+            outputs.cacheIf { false }
+        }
+    }
+}
+
 // Convenience alias to run the IntelliJ IDE with the Lyng plugin from the project root.
 // Usage: ./gradlew runIde
 // It simply delegates to :lyng-idea:runIde provided by the Gradle IntelliJ Plugin.
