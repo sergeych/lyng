@@ -14,14 +14,20 @@ import io.ktor.http.takeFrom
 
 internal fun createKtorHttpEngine(
     engineFactory: HttpClientEngineFactory<HttpClientEngineConfig>,
-): LyngHttpEngine = KtorLyngHttpEngine(engineFactory)
+    config: LyngHttpConfig,
+): LyngHttpEngine = KtorLyngHttpEngine(engineFactory, config)
 
 private class KtorLyngHttpEngine(
     engineFactory: HttpClientEngineFactory<HttpClientEngineConfig>,
+    config: LyngHttpConfig,
 ) : LyngHttpEngine {
     private val clientResult = runCatching {
         HttpClient(engineFactory) {
             expectSuccess = false
+            followRedirects = false
+            install(CappedHttpRedirect) {
+                maxRedirects = config.maxRedirects
+            }
         }
     }
 

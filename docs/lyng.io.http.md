@@ -42,6 +42,21 @@ suspend fun bootstrapHttp() {
 }
 ```
 
+Redirects are followed transparently, up to 10 hops by default. Hosts can set a different
+limit when installing the module:
+
+```kotlin
+createHttpModule(
+    PermitAllHttpAccessPolicy,
+    scope,
+    LyngHttpConfig(maxRedirects = 5),
+)
+```
+
+Exceeding the limit raises an `HTTP_REDIRECT_LIMIT_EXCEEDED` error containing the configured
+limit, initial URL, and last redirect target. HTTPS-to-HTTP redirects remain disabled, and the
+`Authorization` header is removed when a redirect changes authority.
+
 ---
 
 ## Using from Lyng scripts

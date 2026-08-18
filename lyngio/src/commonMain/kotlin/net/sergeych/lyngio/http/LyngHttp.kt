@@ -33,6 +33,18 @@ data class LyngHttpResponse(
     val bodyBytes: ByteArray,
 )
 
+data class LyngHttpConfig(
+    val maxRedirects: Int = DEFAULT_MAX_REDIRECTS,
+) {
+    init {
+        require(maxRedirects >= 0) { "maxRedirects must not be negative" }
+    }
+
+    companion object {
+        const val DEFAULT_MAX_REDIRECTS: Int = 10
+    }
+}
+
 interface LyngHttpEngine {
     val isSupported: Boolean
     suspend fun request(request: LyngHttpRequest): LyngHttpResponse
@@ -46,4 +58,4 @@ internal object UnsupportedHttpEngine : LyngHttpEngine {
     }
 }
 
-expect fun getSystemHttpEngine(): LyngHttpEngine
+expect fun getSystemHttpEngine(config: LyngHttpConfig = LyngHttpConfig()): LyngHttpEngine

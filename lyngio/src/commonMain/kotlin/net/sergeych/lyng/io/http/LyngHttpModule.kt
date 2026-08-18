@@ -41,6 +41,7 @@ import net.sergeych.lyng.requireNoArgs
 import net.sergeych.lyng.requireScope
 import net.sergeych.lyngio.http.LyngHttpRequest
 import net.sergeych.lyngio.http.LyngHttpResponse
+import net.sergeych.lyngio.http.LyngHttpConfig
 import net.sergeych.lyngio.http.getSystemHttpEngine
 import net.sergeych.lyngio.http.security.HttpAccessDeniedException
 import net.sergeych.lyngio.http.security.HttpAccessOp
@@ -51,21 +52,36 @@ import net.sergeych.lyngio.stdlib_included.http_typesLyng
 private const val HTTP_MODULE_NAME = "lyng.io.http"
 internal const val HTTP_TYPES_MODULE_NAME = "lyng.io.http.types"
 
-fun createHttpModule(policy: HttpAccessPolicy, scope: Scope): Boolean =
-    createHttpModule(policy, scope.importManager)
+fun createHttpModule(
+    policy: HttpAccessPolicy,
+    scope: Scope,
+    config: LyngHttpConfig = LyngHttpConfig(),
+): Boolean = createHttpModule(policy, scope.importManager, config)
 
-fun createHttp(policy: HttpAccessPolicy, scope: Scope): Boolean = createHttpModule(policy, scope)
+fun createHttp(
+    policy: HttpAccessPolicy,
+    scope: Scope,
+    config: LyngHttpConfig = LyngHttpConfig(),
+): Boolean = createHttpModule(policy, scope, config)
 
-fun createHttpModule(policy: HttpAccessPolicy, manager: ImportManager): Boolean {
+fun createHttpModule(
+    policy: HttpAccessPolicy,
+    manager: ImportManager,
+    config: LyngHttpConfig = LyngHttpConfig(),
+): Boolean {
     createHttpTypesModule(manager)
     if (manager.packageNames.contains(HTTP_MODULE_NAME)) return false
     manager.addPackage(HTTP_MODULE_NAME) { module ->
-        buildHttpModule(module, policy)
+        buildHttpModule(module, policy, config)
     }
     return true
 }
 
-fun createHttp(policy: HttpAccessPolicy, manager: ImportManager): Boolean = createHttpModule(policy, manager)
+fun createHttp(
+    policy: HttpAccessPolicy,
+    manager: ImportManager,
+    config: LyngHttpConfig = LyngHttpConfig(),
+): Boolean = createHttpModule(policy, manager, config)
 
 internal fun createHttpTypesModule(manager: ImportManager): Boolean {
     if (manager.packageNames.contains(HTTP_TYPES_MODULE_NAME)) return false
@@ -80,9 +96,9 @@ private suspend fun buildHttpTypesModule(module: ModuleScope) {
     module.addConst("HttpHeaders", ObjHttpHeaders.type)
 }
 
-private suspend fun buildHttpModule(module: ModuleScope, policy: HttpAccessPolicy) {
+private suspend fun buildHttpModule(module: ModuleScope, policy: HttpAccessPolicy, config: LyngHttpConfig) {
     module.eval(Source(HTTP_MODULE_NAME, httpLyng))
-    val engine = getSystemHttpEngine()
+    val engine = getSystemHttpEngine(config)
 
     val headersType = ObjHttpHeaders.type
     val requestType = ObjHttpRequest.type
