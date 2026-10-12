@@ -5,6 +5,8 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngineConfig
 import io.ktor.client.engine.HttpClientEngineFactory
 import io.ktor.client.plugins.timeout
+import io.ktor.client.plugins.HttpTimeout
+import kotlinx.coroutines.CancellationException
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
@@ -25,6 +27,7 @@ private class KtorLyngHttpEngine(
         HttpClient(engineFactory) {
             expectSuccess = false
             followRedirects = false
+            install(HttpTimeout)
             install(CappedHttpRedirect) {
                 maxRedirects = config.maxRedirects
             }
@@ -39,15 +42,22 @@ private class KtorLyngHttpEngine(
             throw UnsupportedOperationException(it.message ?: "HTTP client is not supported")
         }
 
-        val response = httpClient.request {
-            applyRequest(request)
+        try {
+            val response = httpClient.request { applyRequest(request) }
+            return LyngHttpResponse(
+                status = response.status.value,
+                statusText = response.status.description,
+                headers = response.headers.entries().associate { it.key to it.value.toList() },
+                bodyBytes = response.body<ByteArray>(),
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: HttpRedirectLimitExceededException) {
+            // Keep the existing typed redirect-limit contract for host callers.
+            throw e
+        } catch (e: Exception) {
+            throw LyngHttpRequestException(request, e)
         }
-        return LyngHttpResponse(
-            status = response.status.value,
-            statusText = response.status.description,
-            headers = response.headers.entries().associate { it.key to it.value.toList() },
-            bodyBytes = response.body<ByteArray>(),
-        )
     }
 
     private fun HttpRequestBuilder.applyRequest(request: LyngHttpRequest) {

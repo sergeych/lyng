@@ -29,7 +29,7 @@ plugins {
 }
 
 group = "net.sergeych"
-version = "0.0.1-SNAPSHOT"
+version = providers.gradleProperty("lyngio.version").getOrElse("0.0.1-SNAPSHOT")
 
 private fun Project.sqliteLinuxLinkerOpts(vararg defaultDirs: String): List<String> {
     val overrideDir = providers.gradleProperty("sqlite3.lib.dir").orNull

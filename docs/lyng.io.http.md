@@ -194,3 +194,17 @@ val allowLocalOnly = object : HttpAccessPolicy {
 - **Windows native:** supported via the Ktor WinHttp client backend
 - **Apple native:** supported via the Ktor Darwin client backend
 - **Other targets:** may report unsupported; use `Http.isSupported()` before relying on it
+
+## Request failure diagnostics
+
+Transport exceptions report the request method and target, a category, the
+underlying exception/cause chain, and recovery advice. Query strings and userinfo
+are redacted from the diagnostic target. Categories are `HTTP_TLS_FAILED`,
+`HTTP_TIMEOUT`, `HTTP_DNS_FAILED`, `HTTP_CONNECTION_FAILED` and
+`HTTP_REQUEST_FAILED`. Permission denials are `HTTP_ACCESS_DENIED`; redirect
+limit errors retain `HTTP_REDIRECT_LIMIT_EXCEEDED`.
+
+`HTTP_TLS_FAILED` means the handshake failed before an HTTP response. Do not
+retry the same URL unchanged; use another source. A remote TLS fatal alert is
+not a Lyng syntax error. Non-2xx responses remain ordinary response objects, and
+request cancellation propagates rather than becoming a generic HTTP error.

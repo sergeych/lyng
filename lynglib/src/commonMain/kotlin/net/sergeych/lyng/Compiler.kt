@@ -4021,6 +4021,7 @@ class Compiler(
         while (true) {
             val t = cc.next()
             when (t.type) {
+                Token.Type.NEWLINE, Token.Type.SINGLE_LINE_COMMENT, Token.Type.MULTILINE_COMMENT -> continue
                 Token.Type.COMMA -> {
                     // todo: check commas sequences like [,] [,,] before, after or instead of expressions
                 }

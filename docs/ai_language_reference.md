@@ -43,6 +43,8 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
 
 ## 3. Literals and Core Expressions
 - Scalars: `null`, `true`, `false`, `void`.
+- List literals allow multiline layout, comments between entries and trailing commas.
+  Newlines before the closing `]` are whitespace, including in nested and empty lists.
 - List literal: `[a, b, c]`, spreads with `...`.
   - Spread positions: beginning, middle, end are all valid: `[...a]`, `[0, ...a, 4]`, `[head, ...mid, tail]`.
   - Spread source must be a `List` at runtime (non-list spread raises an error).

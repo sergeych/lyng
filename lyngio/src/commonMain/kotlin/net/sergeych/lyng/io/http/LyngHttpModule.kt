@@ -17,6 +17,8 @@
 
 package net.sergeych.lyng.io.http
 
+import kotlinx.coroutines.CancellationException
+
 import net.sergeych.lyng.ModuleScope
 import net.sergeych.lyng.Scope
 import net.sergeych.lyng.ScopeFacade
@@ -164,8 +166,10 @@ private suspend fun buildHttpModule(module: ModuleScope, policy: HttpAccessPolic
 private suspend inline fun ScopeFacade.httpGuard(crossinline block: suspend () -> Obj): Obj {
     return try {
         block()
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: HttpAccessDeniedException) {
-        raiseIllegalOperation(e.reasonDetail ?: "http access denied")
+        raiseIllegalOperation("HTTP_ACCESS_DENIED: " + (e.reasonDetail ?: "http access denied"))
     } catch (e: Exception) {
         raiseIllegalOperation(e.message ?: "http error")
     }

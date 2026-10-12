@@ -32,7 +32,15 @@ extern class HttpResponse {
     fun bytes(): Buffer
 }
 
-/* HTTP/HTTPS client singleton. */
+/*
+    HTTP/HTTPS client singleton.
+    Transport failures include a diagnostic code, request method/URL, underlying cause,
+    and recovery advice: HTTP_TLS_FAILED, HTTP_TIMEOUT, HTTP_DNS_FAILED,
+    HTTP_CONNECTION_FAILED, HTTP_REQUEST_FAILED. HTTP_ACCESS_DENIED means no grant.
+    HTTP_TLS_FAILED occurs before any response: do not retry the URL unchanged;
+    use another source. Query strings/userinfo are redacted from the diagnostic target.
+    Non-2xx HTTP statuses are returned normally. Cancellation propagates to the host.
+*/
 extern object Http {
     /* True when HTTP client support is available on this runtime. */
     fun isSupported(): Bool
