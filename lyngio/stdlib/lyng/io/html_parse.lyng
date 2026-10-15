@@ -1,0 +1,31 @@
+package lyng.io.html.parse
+
+/* Offline HTML5 parsing. Never fetches resources or executes JavaScript. */
+extern object Html {
+    /* Parse a document or fragment; baseUrl resolves relative attributes (no request). */
+    fun parse(source: String, baseUrl: String = ""): HtmlDocument
+}
+
+/* Parsed document. Retains the original DOM for selection and attributes. */
+extern class HtmlDocument {
+    /* Decoded document title, or an empty string. */
+    val title: String
+    /* Readable body text: entities decoded, block/BR boundaries preserved, whitespace normalized.
+       Excludes script, style, template, noscript and [hidden]; does not evaluate CSS visibility. */
+    fun text(): String
+    /* CSS selector; empty list when nothing matches. Invalid selectors raise an error. */
+    fun select(css: String): List<HtmlElement>
+}
+
+/* An element selected from a document. */
+extern class HtmlElement {
+    /* Same readable-text rules as HtmlDocument.text(), scoped to this element. */
+    fun text(): String
+    /* Decoded attribute value; empty string when absent. */
+    fun attr(name: String): String
+    /* Attribute resolved against the base URL (including HTML <base>); empty if unresolvable.
+       Inspect the scheme before using the URL: it is not restricted to HTTP/HTTPS. */
+    fun absUrl(name: String): String
+    /* CSS selector scoped to this element. */
+    fun select(css: String): List<HtmlElement>
+}

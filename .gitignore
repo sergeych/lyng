@@ -32,3 +32,4 @@ test_output*.txt
 /bugs/
 contents.db
 /docs/idea_plugin.md.deploy_backup
+/.claude/settings.local.json

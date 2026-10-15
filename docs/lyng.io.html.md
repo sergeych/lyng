@@ -1,5 +1,7 @@
 # lyng.io.html
 
+For reading existing HTML, see [lyng.io.html.parse](lyng.io.html.parse.md).
+
 `lyng.io.html` provides a pure Lyng HTML builder DSL. It uses Lyng context
 receiver extensions, so text can be appended with `+"text"` inside tag blocks
 without global builder state.

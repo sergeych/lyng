@@ -98,6 +98,7 @@ Requires installing `lyngio` into the import manager from host code.
 - `import lyng.io.ws` (WebSocket client API; currently supported on JVM, capability-gated elsewhere)
 - `import lyng.io.net` (TCP/UDP transport API; currently supported on JVM, capability-gated elsewhere)
 - `import lyng.io.html` (pure Lyng HTML builder DSL: `html { body { h3 { +"text" } } }`)
+- `import lyng.io.html.parse` (offline HTML5 parsing: `Html.parse(source, baseUrl = "")`, document title/text, CSS selectors, element text/attributes/absolute URLs; see [HTML parsing](lyng.io.html.parse.md))
 - Shared network value-type packages are also available when installed by host code:
   - `import lyng.io.http.types` (`HttpHeaders`)
   - `import lyng.io.ws.types` (`WsMessage`)

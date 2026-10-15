@@ -29,7 +29,7 @@ plugins {
 }
 
 group = "net.sergeych"
-version = providers.gradleProperty("lyngio.version").getOrElse("0.0.1-SNAPSHOT")
+version = providers.gradleProperty("lyngio.version").getOrElse("0.0.3-SNAPSHOT")
 
 private fun Project.sqliteLinuxLinkerOpts(vararg defaultDirs: String): List<String> {
     val overrideDir = providers.gradleProperty("sqlite3.lib.dir").orNull
@@ -141,6 +141,7 @@ kotlin {
                 api(libs.kotlinx.coroutines.core)
                 api(libs.mordant.core)
                 api(libs.ktor.client.core)
+                implementation("com.fleeksoft.ksoup:ksoup:0.2.6")
                 implementation(libs.ktor.client.websockets)
             }
         }
@@ -354,4 +355,10 @@ publishing {
             }
         }
     }
+}
+
+// Lyng's JVM dependencies include Java 21 bytecode; keep the Java 17 library target.
+val testToolchains = extensions.getByType<org.gradle.jvm.toolchain.JavaToolchainService>()
+tasks.withType<Test>().configureEach {
+    javaLauncher.set(testToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
 }
