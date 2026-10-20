@@ -9,7 +9,10 @@ History note:
 
 ## Unreleased
 
-- No unreleased entries yet.
+- Reject member functions named after their enclosing class and diagnose unsupported `this(...)` constructor delegation at compile time.
+- Preserve declared, inferred, and generic return types from static method calls.
+- Initialize singleton static members and dispatch their calls through class scope, including trailing-lambda calls.
+- Update the language reference and OOP guide with constructor naming rules and typed static factory examples.
 
 ## 1.5.6 (2026-05-16)
 

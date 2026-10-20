@@ -113,9 +113,10 @@ process_file() {
     # - [text](file.md) -> [text](#file.md)
     # - [text](dir/file.md) -> [text](#dir_file.md)
     # - [text](file.md#anchor) -> [text](#anchor)
-    # - Fix image links: [alt](../images/...) -> [alt](images/...) if needed, but none found yet.
+    # - Resolve site-root image URLs against the local site resources for embedding.
     
     cat "$full_path" | \
+    perl -pe 's{(!\[[^\]]*\]\()/}{$1site/src/jsMain/resources/}g' | \
     perl -pe 's/\[([^\]]+)\]\(([^)]+)\.md\)/"[$1](#" . ($2 =~ s|\/|_|gr) . ".md)"/ge' | \
     perl -pe 's/\[([^\]]+)\]\(([^)]+)\.md#([^)]+)\)/[$1](#$3)/g' >> "$MERGED_MD"
     

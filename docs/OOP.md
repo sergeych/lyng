@@ -42,6 +42,12 @@ a _constructor_ that requires two parameters for fields. So when creating it wit
 Form now on `Point` is a class, it's type is `Class`, and we can create instances with it as in the
 example above.
 
+A member function cannot have the same name as its enclosing class, including a
+static member function. Constructors are declared in the class header; use the
+class name to create another instance. `this(...)` and `this@Type(...)` do not
+declare or delegate to secondary constructors. Local functions may shadow class
+names according to the normal lexical scope rules.
+
 ## Singleton Objects
 
 Singleton objects are declared using the `object` keyword. An `object` declaration defines both a class and a single instance of that class at the same time. This is perfect for stateless utilities, global configuration, or shared delegates.
@@ -1040,6 +1046,25 @@ Static fields can be accessed from static methods via the class qualifier:
     assertEquals( "foo", Test.getData() )
     Test.data = "bar"
     assertEquals("bar", Test.getData() )
+    >>> void
+
+Static calls preserve their declared or inferred return types, so their results
+can be used directly in chained expressions or assigned without a type annotation.
+Generic static factories also preserve the type inferred from their arguments:
+
+    class StaticBox<T>(val value: T) {
+        static fun of<T>(value: T): StaticBox<T> = StaticBox(value)
+    }
+    val box = StaticBox.of("hello")
+    assertEquals(5, box.value.length)
+    >>> void
+
+Named singleton objects also support static methods:
+
+    object StaticGreeting {
+        static fun text(): String = "hello"
+    }
+    assertEquals(5, StaticGreeting.text().length)
     >>> void
 
 # Extension members
