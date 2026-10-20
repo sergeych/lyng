@@ -47,6 +47,7 @@ assertEquals(A.E.One, A.One)
  ## Resources: 
 
 - [Language home](https://lynglang.com)
+- [AI agent instructions](docs/ai_agents.md) and [machine-readable entry point](https://lynglang.com/llms.txt)
 - [introduction and tutorial](docs/tutorial.md) - start here please
 - [Latest release notes (1.5.6)](docs/whats_new.md)
 - [What's New in 1.5](docs/whats_new_1_5.md)

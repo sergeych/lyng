@@ -1,0 +1,14 @@
+# Lyng
+
+Lyng is a statically resolved scripting language. Read its current references before generating code; do not infer APIs from Kotlin or Java.
+
+## Canonical AI references
+- [Language reference](https://lynglang.com/docs/ai_language_reference.md): implemented syntax, types, control flow, modules, and current limitations.
+- [Standard-library reference](https://lynglang.com/docs/ai_stdlib_reference.md): default globals, collections, built-in imports, and optional modules.
+- [Agent instructions](https://lynglang.com/docs/ai_agents.md): documentation workflow, version checks, and offline use.
+
+## Additional documentation
+- [Tutorial](https://lynglang.com/docs/tutorial.md)
+- [Source repository](https://gitea.sergeych.net/SergeychWorks/lyng)
+
+The two compact references above take precedence over older specs or proposals. Optional modules must be installed by the host. Verify uncertain constructs with a small read-only script on the actual runtime before editing user data.

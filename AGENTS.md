@@ -1,6 +1,7 @@
 # AI Agent Notes
 
 ## Canonical AI References
+- Public discovery: `https://lynglang.com/llms.txt`; workflow: `docs/ai_agents.md`. Keep these links current when moving canonical references.
 - Use `docs/ai_language_reference.md` as the primary, compiler-verified Lyng language reference for code generation.
 - For generics-heavy code generation, follow `docs/ai_language_reference.md` section `7.1 Generics Runtime Model and Bounds` and `7.2 Differences vs Java / Kotlin / Scala`.
 - Use `docs/ai_stdlib_reference.md` for default runtime/module APIs and stdlib surface.
