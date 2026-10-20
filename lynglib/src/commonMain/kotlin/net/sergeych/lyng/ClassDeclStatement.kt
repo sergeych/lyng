@@ -88,6 +88,9 @@ internal suspend fun executeClassDecl(
         classScope.addConst("object", newClass)
 
         spec.bodyInit?.let { executeBytecodeWithSeed(classScope, it, "object body init") }
+        for (statement in spec.initScope) {
+            executeBytecodeWithSeed(classScope, statement, "object static init")
+        }
 
         val instance = newClass.callOn(scope.createChildScope(Arguments.EMPTY))
         if (spec.declaredName != null) {

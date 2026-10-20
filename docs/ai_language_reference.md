@@ -126,6 +126,7 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
   - extension functions: `fun Type.name(...) { ... }`.
   - context-aware extension functions: `context(Tag) fun String.unaryPlus() { this@Tag.addText(this) }`.
   - named singleton `object` declarations can be extension receivers too: `fun Config.describe(...) { ... }`, `val Config.tag get() = ...`.
+  - Static class/object methods preserve declared or inferable return types at call sites, including chained member access and generic return types inferred from arguments. For example, `static fun of<T>(v: T): Box<T> = Box(v)` lets `Box.of("abc").value.length` retain the `String` member type.
   - static extension functions are callable on the type object: `static fun List<T>.fill(...)` -> `List.fill(...)`.
   - delegated callable: `fun f(...) by delegate`.
 - Type aliases:

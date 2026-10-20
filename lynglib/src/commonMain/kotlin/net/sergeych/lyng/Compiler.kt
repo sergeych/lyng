@@ -3121,7 +3121,7 @@ class Compiler(
                                             val field = FieldRef(left, next.value, isOptional)
                                             operand = CallRef(field, args, tailBlock, isOptional, memberCallTypeArgs)
                                         } else {
-                                            operand = MethodCallRef(left, next.value, args, tailBlock, isOptional, memberCallTypeArgs)
+                                            operand = MethodCallRef(left, next.value, args, tailBlock, isOptional, memberCallTypeArgs, classScopeCall = true)
                                         }
                                     } else {
                                         // instance method call
@@ -3238,14 +3238,14 @@ class Compiler(
                                                     resolutionSink?.referenceReflection(name.value, next.pos)
                                                 }
                                             }
-                                            MethodCallRef(left, next.value, args, true, isOptional)
+                                            MethodCallRef(left, next.value, args, true, isOptional, classScopeCall = shouldTreatAsClassScopeCall(left, next.value))
                                         } else {
                                             val unionCall = buildUnionMethodCall(left, next.value, next.pos, isOptional, args, true)
                                             if (unionCall != null) {
                                                 unionCall
                                             } else {
                                                 enforceReceiverTypeForMember(left, next.value, next.pos)
-                                                MethodCallRef(left, next.value, args, true, isOptional)
+                                                MethodCallRef(left, next.value, args, true, isOptional, classScopeCall = shouldTreatAsClassScopeCall(left, next.value))
                                             }
                                         }
                                         is QualifiedThisRef ->
@@ -3265,7 +3265,7 @@ class Compiler(
                                                 unionCall
                                             } else {
                                                 enforceReceiverTypeForMember(left, next.value, next.pos)
-                                                MethodCallRef(left, next.value, args, true, isOptional)
+                                                MethodCallRef(left, next.value, args, true, isOptional, classScopeCall = shouldTreatAsClassScopeCall(left, next.value))
                                             }
                                         }
                                     }
@@ -8686,6 +8686,7 @@ class Compiler(
 
         val initScope = popInitScope()
         val wrappedBodyInit = bodyInit?.let { wrapClassBodyBytecode(it, "object@$className") }
+        val wrappedInitScope = initScope.map { wrapClassBodyBytecode(it, "objectInit@$className") }
 
         val spec = ClassDeclSpec(
             declaredName = declaredName,
@@ -8701,7 +8702,7 @@ class Compiler(
             constructorArgs = null,
             constructorFieldIds = null,
             bodyInit = wrappedBodyInit,
-            initScope = emptyList()
+            initScope = wrappedInitScope
         )
         return ClassDeclStatement(spec)
     }
@@ -10071,7 +10072,7 @@ class Compiler(
             pendingTypeParamStack.removeLast()
         }
 
-        if (parentContext is CodeContext.ClassBody && !isStatic && extTypeName == null) {
+        if (parentContext is CodeContext.ClassBody && extTypeName == null) {
             classMemberTypeDeclByName.getOrPut(parentContext.name) { mutableMapOf() }[name] = TypeDecl.Function(
                 receiver = receiverTypeDecl,
                 contextReceivers = contextReceiverTypeDecls,
@@ -10245,7 +10246,7 @@ class Compiler(
             val inferredReturnDecl = returnTypeDecl ?: inferReturnTypeDeclFromStatement(rawFnStatements)
             val inferredReturnClass = inferredReturnDecl?.let { resolveTypeDeclObjClass(it) }
                 ?: inferReturnClassFromStatement(rawFnStatements)
-            if (parentContext is CodeContext.ClassBody && !isStatic && extTypeName == null) {
+            if (parentContext is CodeContext.ClassBody && extTypeName == null) {
                 val ownerClassName = parentContext.name
                 run {
                     val memberTypeDecl = TypeDecl.Function(

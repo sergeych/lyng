@@ -4876,11 +4876,16 @@ class BytecodeCompiler(
         val receiverClass = resolveReceiverClass(ref.receiver) ?: ObjDynamic.type
         val receiver = compileRefWithFallback(ref.receiver, null, refPosOrCurrent(ref.receiver)) ?: return null
         val dst = allocSlot()
-        if (shouldUseClassScopeReceiver(ref.receiver, receiver, receiverClass)) {
+        val classReceiver = shouldUseClassScopeReceiver(ref.receiver, receiver, receiverClass)
+        if (ref.classScopeCall || classReceiver) {
+            // Singleton objects carry their static members on the instance's class.
+            val classSlot = if (classReceiver) receiver.slot else allocSlot().also {
+                builder.emit(Opcode.GET_OBJ_CLASS, receiver.slot, it)
+            }
             val nameId = builder.addConst(BytecodeConst.StringVal(ref.name))
             val memberSlot = allocSlot()
             if (!ref.isOptional) {
-                builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, memberSlot)
+                builder.emit(Opcode.GET_CLASS_SCOPE, classSlot, nameId, memberSlot)
             } else {
                 val nullSlot = allocSlot()
                 builder.emit(Opcode.CONST_NULL, nullSlot)
@@ -4892,7 +4897,7 @@ class BytecodeCompiler(
                     Opcode.JMP_IF_TRUE,
                     listOf(CmdBuilder.Operand.IntVal(cmpSlot), CmdBuilder.Operand.LabelRef(nullLabel))
                 )
-                builder.emit(Opcode.GET_CLASS_SCOPE, receiver.slot, nameId, memberSlot)
+                builder.emit(Opcode.GET_CLASS_SCOPE, classSlot, nameId, memberSlot)
                 builder.emit(Opcode.JMP, listOf(CmdBuilder.Operand.LabelRef(endLabel)))
                 builder.mark(nullLabel)
                 builder.emit(Opcode.CONST_NULL, memberSlot)
