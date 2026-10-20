@@ -17,11 +17,15 @@
 #
 #
 
+# Pass snapshot overrides through explicitly, e.g. -Plyng.version=1.5.11-SNAPSHOT.
+GRADLE_ARGS=()
 upload_only=false
 target=vps   # default: new server; use --old for d.lynglang.com
 for arg in "$@"; do
   if [[ "$arg" == "-u" || "$arg" == "--upload-only" ]]; then
     upload_only=true
+  elif [[ "$arg" == -P* ]]; then
+    GRADLE_ARGS+=("$arg")
   elif [[ "$arg" == "--old" ]]; then
     target=com
   fi
@@ -125,7 +129,7 @@ if [[ "$upload_only" == false ]]; then
   refreshTextmateZip
   updateIdeaPluginDownloadLink || echo "WARN: proceeding without updating IDEA plugin download link"
 
-  ./gradlew site:jsBrowserDistribution
+  ./gradlew site:jsBrowserDistribution "${GRADLE_ARGS[@]}"
   BUILD_RC=$?
 
   # Always restore original doc if backup exists
