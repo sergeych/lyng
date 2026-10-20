@@ -133,6 +133,8 @@ Primary sources used: `lynglib/src/commonMain/kotlin/net/sergeych/lyng/{Parser,T
   - generic: `type Box<T> = List<T>`
   - aliases are expanded structurally.
 - Classes/objects/enums/interfaces:
+  - Constructors use the class name. A direct member function (including `static`) cannot have the same name as its enclosing class; local functions may still shadow names normally.
+  - `this(...)` and `this@Type(...)` are not secondary-constructor delegation syntax; call the class by name to construct another instance.
   - `interface` is parsed as abstract class synonym.
   - `object` supports named singleton and anonymous object expression forms.
   - enums support lifted entries: `enum E* { A, B }`.

@@ -7458,6 +7458,14 @@ class Compiler(
         isOptional: Boolean,
         explicitTypeArgs: List<TypeDecl>? = null
     ): ObjRef {
+        val thisTypeName = when (left) {
+            is LocalVarRef -> if (left.name == "this") currentImplicitThisTypeName() else null
+            is QualifiedThisRef -> left.typeName
+            else -> null
+        }
+        if (thisTypeName != null && codeContexts.any { it is CodeContext.ClassBody && it.name == thisTypeName }) {
+            throw ScriptError(cc.currentPos(), "constructor delegation through this is not supported; call the class by name")
+        }
         var detectedBlockArgument = blockArgument
         val expectedReceiver = tailBlockReceiverType(left)
         val expectedTailCallable = expectedCallableArgumentType(left, 0)
@@ -9983,6 +9991,10 @@ class Compiler(
             start = t.pos
             name = t.value
             nameStartPos = t.pos
+        }
+        if (parentContext is CodeContext.ClassBody && extTypeName == null &&
+            name == parentContext.name.substringAfterLast('.')) {
+            throw ScriptError(nameStartPos, "member function cannot have the same name as its enclosing class: $name")
         }
         val extensionWrapperName = extTypeName?.let { extensionCallableName(it, name) }
         val classCtx = codeContexts.asReversed().firstOrNull { it is CodeContext.ClassBody } as? CodeContext.ClassBody
