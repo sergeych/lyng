@@ -6909,6 +6909,16 @@ class BytecodeCompiler(
                 val localSlot = scopeSlotCount + localIndex
                 if (localSlot != exceptionSlot) {
                     emitMove(CompiledValue(exceptionSlot, SlotType.OBJ), localSlot)
+                    val declId = builder.addConst(
+                        BytecodeConst.LocalDecl(
+                            name = catchVarName,
+                            isMutable = false,
+                            visibility = Visibility.Public,
+                            isTransient = false,
+                            typeDecl = null
+                        )
+                    )
+                    builder.emit(Opcode.DECL_LOCAL, declId, localSlot)
                 }
                 updateSlotType(localSlot, SlotType.OBJ)
             }

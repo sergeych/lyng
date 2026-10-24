@@ -2339,6 +2339,26 @@ class ScriptTest {
     }
 
     @Test
+    fun testCatchVariableRebindsOnEachLoopIteration() = runTest {
+        eval(
+            """
+            val results = []
+            for (i in [1, -2, -3, 4]) {
+                try {
+                    if (i < 0) {
+                        throw IllegalStateException("negative " + i)
+                    }
+                    results.add("ok")
+                } catch(e) {
+                    results.add("error: " + e.message)
+                }
+            }
+            assertEquals(["ok", "error: negative -2", "error: negative -3", "ok"], results)
+            """.trimIndent()
+        )
+    }
+
+    @Test
     fun testThrowFromKotlin() = runTest {
         val c = Script.newScope()
         c.addFn("callThrow") {

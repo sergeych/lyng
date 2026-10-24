@@ -13,6 +13,7 @@ History note:
 - Preserve declared, inferred, and generic return types from static method calls.
 - Initialize singleton static members and dispatch their calls through class scope, including trailing-lambda calls.
 - Update the language reference and OOP guide with constructor naming rules and typed static factory examples.
+- Fix read-only variable error when a catch variable is bound again inside a loop.
 
 ## 1.5.6 (2026-05-16)
 
